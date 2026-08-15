@@ -1,0 +1,120 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String    @unique
+  emailVerified DateTime?
+  image         String?
+  password      String?
+  username      String    @unique
+  rating        Int       @default(1200)
+  wins          Int       @default(0)
+  losses        Int       @default(0)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  accounts    Account[]
+  sessions    Session[]
+  battlesAs1  Battle[]     @relation("Player1")
+  battlesAs2  Battle[]     @relation("Player2")
+  submissions Submission[]
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+model Problem {
+  id          String   @id @default(cuid())
+  title       String
+  slug        String   @unique
+  description String
+  difficulty  String   // EASY | MEDIUM | HARD
+  tags        String   // JSON array stored as string
+  examples    String   // JSON array stored as string
+  constraints String
+  testCases   String   // JSON array stored as string (hidden)
+  timeLimit   Int      @default(2000) // ms
+  memoryLimit Int      @default(256)  // MB
+  createdAt   DateTime @default(now())
+
+  battles     Battle[]
+  submissions Submission[]
+}
+
+model Battle {
+  id          String    @id @default(cuid())
+  player1Id   String
+  player2Id   String
+  problemId   String
+  status      String    @default("WAITING") // WAITING | ACTIVE | FINISHED
+  winnerId    String?
+  startedAt   DateTime?
+  endedAt     DateTime?
+  createdAt   DateTime  @default(now())
+
+  player1     User      @relation("Player1", fields: [player1Id], references: [id])
+  player2     User      @relation("Player2", fields: [player2Id], references: [id])
+  problem     Problem   @relation(fields: [problemId], references: [id])
+  submissions Submission[]
+}
+
+model Submission {
+  id        String   @id @default(cuid())
+  userId    String
+  problemId String
+  battleId  String?
+  code      String
+  language  String
+  status    String   // PENDING | ACCEPTED | WRONG_ANSWER | TIME_LIMIT_EXCEEDED | RUNTIME_ERROR | COMPILATION_ERROR
+  runtime   Int?     // ms
+  memory    Int?     // KB
+  score     Int      @default(0)
+  createdAt DateTime @default(now())
+
+  user    User    @relation(fields: [userId], references: [id])
+  problem Problem @relation(fields: [problemId], references: [id])
+  battle  Battle? @relation(fields: [battleId], references: [id])
+}
