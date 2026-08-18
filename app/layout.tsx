@@ -16,6 +16,9 @@ export const metadata: Metadata = {
     "Elo rating",
     "code editor",
   ],
+  icons: {
+    icon: "/favicon.svg",
+  },
   openGraph: {
     title: "AlgoArena – Real-Time Competitive Coding Platform",
     description: "Battle coders in real-time 1v1 matches.",

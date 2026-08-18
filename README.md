@@ -2,6 +2,19 @@
 
 > **Real-Time Competitive Coding Platform** — Battle coders 1v1 with Elo-based matchmaking, Monaco editor, automated judging, and live leaderboards.
 
+## Local setup
+
+1. Install dependencies with `npm install`.
+2. Copy `.env.example` to `.env` and populate your local credentials.
+3. Run `npx prisma generate` and `npx prisma db push`.
+4. Start the app with `npm run dev`.
+
+## Product Notes
+
+- Focus on a clean ranked match flow and strong competitive feel before expanding deeper features.
+- Prioritize trust, speed, and fair matchmaking in every arena interaction.
+- Build a polished demo experience that makes the product feel real without overcommitting on backend complexity.
+
 ---
 
 ## Tech Stack
