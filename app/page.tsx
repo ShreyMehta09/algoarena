@@ -174,11 +174,11 @@ export default function LandingPage() {
             Code.{" "}
             <span className="text-gradient">Battle.</span>
             <br />
-            Dominate.
+            Climb.
           </h1>
 
           <p className="text-lg sm:text-xl text-slate-400 max-w-2xl mx-auto mb-10 leading-relaxed animate-slide-up [animation-delay:0.1s]">
-            Real-time 1v1 coding battles with skill-based matchmaking. Write
+            Fast 1v1 coding battles with skill-based matchmaking. Solve problems under pressure, validate each shot, and climb the ladder.
             code, watch it execute, and beat your opponent to the top of the
             leaderboard.
           </p>
@@ -427,3 +427,4 @@ export default function LandingPage() {
     </div>
   );
 }
+
