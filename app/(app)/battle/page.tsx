@@ -211,7 +211,7 @@ export default function BattlePage() {
 
             <div>
               <div className="text-xl font-bold text-white mb-1">
-                Finding opponent{".".repeat(dots)}
+                Finding your match{".".repeat(dots)}
               </div>
               <div className="text-sm text-slate-500">
                 Matching within ±{ratingRange} rating
@@ -261,3 +261,4 @@ export default function BattlePage() {
     </div>
   );
 }
+

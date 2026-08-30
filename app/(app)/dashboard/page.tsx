@@ -104,7 +104,7 @@ export default function DashboardPage() {
             <span className="text-gradient">{MOCK_USER.name.split(" ")[0]}</span>
           </h1>
           <p className="text-slate-500 text-sm mt-1">
-            Your competitive coding dashboard
+            Your competitive coding dashboard and weekly momentum
           </p>
         </div>
         <Link
@@ -340,3 +340,4 @@ export default function DashboardPage() {
     </div>
   );
 }
+
