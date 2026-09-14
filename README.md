@@ -157,3 +157,11 @@ Code Execution (planned)
 - [ ] Admin panel for problem management
 - [ ] Email notifications
 - [ ] Mobile-responsive battle layout
+
+
+## Launch plan
+
+- Ship a ranked head-to-head match flow that feels fair and fast.
+- Improve auth, leaderboard sorting, and battle feedback before expanding the platform.
+- Keep the experience polished enough to feel like a real competitive coding product.
+
