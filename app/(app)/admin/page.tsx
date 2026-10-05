@@ -1,9 +1,22 @@
 import Link from "next/link";
 import { Users, FileCode2, Bell, Trophy, ShieldAlert } from "lucide-react";
+import { auth } from "@clerk/nextjs/server";
+import { getOrSyncUser } from "@/lib/sync-user";
+import dbConnect from "@/lib/mongodb";
+import { redirect } from "next/navigation";
 
-export default function AdminOverviewPage() {
+export default async function AdminOverviewPage() {
+  const { userId } = await auth();
+  if (!userId) redirect("/sign-in");
+
+  await dbConnect;
+  const user = await getOrSyncUser(userId);
+  if (!user) redirect("/");
+
+  const isAdmin = user.role === "ADMIN";
+
   const adminLinks = [
-    {
+    ...(isAdmin ? [{
       title: "Manage Users",
       description: "View, ban, or modify user roles.",
       icon: Users,
@@ -11,7 +24,7 @@ export default function AdminOverviewPage() {
       color: "text-blue-400",
       bg: "bg-blue-400/10",
       border: "border-blue-400/20"
-    },
+    }] : []),
     {
       title: "Practice Problems",
       description: "Add, edit, or remove practice problems.",
@@ -30,7 +43,7 @@ export default function AdminOverviewPage() {
       bg: "bg-yellow-400/10",
       border: "border-yellow-400/20"
     },
-    {
+    ...(isAdmin ? [{
       title: "System Notifications",
       description: "Send global announcements to all online users.",
       icon: Bell,
@@ -38,7 +51,7 @@ export default function AdminOverviewPage() {
       color: "text-brand-purple-light",
       bg: "bg-brand-purple/15",
       border: "border-brand-purple/30"
-    }
+    }] : [])
   ];
 
   return (

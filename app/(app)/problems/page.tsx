@@ -5,7 +5,7 @@ import ProblemsClient from "./ProblemsClient";
 export default async function ProblemsPage() {
   await dbConnect;
   
-  const problemsRaw = await Problem.find().select("title slug difficulty tags").lean();
+  const problemsRaw = await Problem.find({ isArena: { $ne: true } }).select("title slug difficulty tags").lean();
   
   const problems = problemsRaw.map((p) => ({
     id: p._id.toString(),

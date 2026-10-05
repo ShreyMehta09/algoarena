@@ -12,6 +12,7 @@ export interface IUser extends Document {
   role: string;
   wins: number;
   losses: number;
+  isBanned: boolean;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -27,6 +28,7 @@ const UserSchema = new Schema<IUser>(
     role:     { type: String, default: "USER" },
     wins:     { type: Number, default: 0 },
     losses:   { type: Number, default: 0 },
+    isBanned: { type: Boolean, default: false },
   },
   { timestamps: true }
 );
@@ -56,6 +58,7 @@ export interface IProblem extends Document {
   testCases: ITestCase[];
   timeLimit: number;
   memoryLimit: number;
+  isArena: boolean;
   createdAt: Date;
 }
 
@@ -71,6 +74,7 @@ const ProblemSchema = new Schema<IProblem>(
     testCases:   [{ input: String, expectedOutput: String, isHidden: Boolean }],
     timeLimit:   { type: Number, default: 2000 },
     memoryLimit: { type: Number, default: 256 },
+    isArena:     { type: Boolean, default: false },
   },
   { timestamps: true }
 );

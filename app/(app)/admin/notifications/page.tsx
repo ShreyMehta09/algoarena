@@ -1,7 +1,8 @@
 import dbConnect from "@/lib/mongodb";
 import { Notification } from "@/lib/models";
 import { revalidatePath } from "next/cache";
-import { Bell, Send } from "lucide-react";
+import { Bell, Send, ArrowLeft } from "lucide-react";
+import Link from "next/link";
 
 export default async function AdminNotificationsPage() {
   await dbConnect;
@@ -23,10 +24,18 @@ export default async function AdminNotificationsPage() {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-xl font-bold text-white flex items-center gap-2">
-        <Bell className="w-6 h-6 text-brand-purple" />
-        System Notifications
-      </h1>
+      <div className="flex items-center gap-4">
+        <Link 
+          href="/admin" 
+          className="p-2 rounded-lg glass border border-white/[0.06] hover:bg-white/[0.04] transition-colors text-slate-400 hover:text-white"
+        >
+          <ArrowLeft className="w-5 h-5" />
+        </Link>
+        <h1 className="text-xl font-bold text-white flex items-center gap-2">
+          <Bell className="w-6 h-6 text-brand-purple" />
+          System Notifications
+        </h1>
+      </div>
       
       <div className="grid md:grid-cols-2 gap-6">
         <div className="glass rounded-xl p-5 border border-white/[0.06]">

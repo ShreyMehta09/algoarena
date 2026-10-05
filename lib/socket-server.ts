@@ -141,8 +141,8 @@ async function createBattleAndNotify(
 
     const filter =
       difficulty && difficulty !== "Any"
-        ? { difficulty: difficulty.toUpperCase() }
-        : {};
+        ? { difficulty: difficulty.toUpperCase(), isArena: true }
+        : { isArena: true };
 
     const problems = await Problem.find(filter, "_id").lean();
 

@@ -1,21 +1,37 @@
 import dbConnect from "@/lib/mongodb";
 import { Problem } from "@/lib/models";
 import Link from "next/link";
-import { Plus, Edit } from "lucide-react";
+import { Plus, Edit, ArrowLeft } from "lucide-react";
 import { DifficultyBadge } from "@/components/ui/badge";
 
-export default async function AdminProblemsPage() {
+export default async function AdminProblemsPage(props: {
+  searchParams?: Promise<{ [key: string]: string | string[] | undefined }>;
+}) {
   await dbConnect;
-  const problems = await Problem.find({}, "title slug difficulty createdAt")
+  const searchParams = await props.searchParams;
+  const isArena = searchParams?.type === "arena";
+
+  const problems = await Problem.find(
+      { isArena: isArena ? true : { $ne: true } }, 
+      "title slug difficulty createdAt"
+    )
     .sort({ createdAt: -1 })
     .lean();
 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-black text-white">Manage Problems</h1>
+        <div className="flex items-center gap-4">
+          <Link 
+            href="/admin" 
+            className="p-2 rounded-lg glass border border-white/[0.06] hover:bg-white/[0.04] transition-colors text-slate-400 hover:text-white"
+          >
+            <ArrowLeft className="w-5 h-5" />
+          </Link>
+          <h1 className="text-2xl font-black text-white">{isArena ? "Arena Problems" : "Practice Problems"}</h1>
+        </div>
         <Link
-          href="/admin/problems/new"
+          href={`/admin/problems/new${isArena ? "?type=arena" : ""}`}
           className="btn-primary flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium"
         >
           <Plus className="w-4 h-4" />

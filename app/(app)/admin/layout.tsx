@@ -14,7 +14,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   await dbConnect;
   const user = await getOrSyncUser(userId);
 
-  if (!user || user.role !== "ADMIN") {
+  if (!user || (user.role !== "ADMIN" && user.role !== "PROBLEM_SETTER")) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[50vh] space-y-4">
         <AlertCircle className="w-12 h-12 text-red-500" />
