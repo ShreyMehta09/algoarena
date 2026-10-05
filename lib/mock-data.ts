@@ -248,37 +248,71 @@ export const LANGUAGES = [
 ];
 
 export const STARTER_CODE: Record<string, string> = {
-  python: `class Solution:
-    def lengthOfLongestSubstring(self, s: str) -> int:
-        # Your solution here
-        pass
+  python: `import sys
+
+def main():
+    # Read all input from standard input
+    input_data = sys.stdin.read().split()
+    if not input_data:
+        return
+    
+    # Process your input and print to standard output
+    
+if __name__ == "__main__":
+    main()
 `,
-  java: `class Solution {
-    public int lengthOfLongestSubstring(String s) {
-        // Your solution here
-        return 0;
+  java: `import java.util.Scanner;
+
+public class Main {
+    public static void main(String[] args) {
+        Scanner scanner = new Scanner(System.in);
+        
+        // Process your input and print to standard output
+        
+        scanner.close();
     }
 }
 `,
-  cpp: `class Solution {
-public:
-    int lengthOfLongestSubstring(string s) {
-        // Your solution here
-        return 0;
-    }
-};
-`,
-  javascript: `/**
- * @param {string} s
- * @return {number}
- */
-var lengthOfLongestSubstring = function(s) {
-    // Your solution here
-};
-`,
-  typescript: `function lengthOfLongestSubstring(s: string): number {
-    // Your solution here
+  cpp: `#include <iostream>
+#include <vector>
+#include <string>
+
+using namespace std;
+
+int main() {
+    // Fast I/O
+    ios_base::sync_with_stdio(false);
+    cin.tie(NULL);
+    
+    // Process your input and print to standard output
+    
     return 0;
-};
+}
+`,
+  javascript: `const fs = require('fs');
+
+function main() {
+    // Read all input from standard input
+    const input = fs.readFileSync('/dev/stdin', 'utf-8').trim().split('\\n');
+    if (!input[0]) return;
+    
+    // Process your input and print to standard output
+    
+}
+
+main();
+`,
+  typescript: `const fs = require('fs');
+
+function main() {
+    // Read all input from standard input
+    const input = fs.readFileSync('/dev/stdin', 'utf-8').trim().split('\\n');
+    if (!input[0]) return;
+    
+    // Process your input and print to standard output
+    
+}
+
+main();
 `,
 };

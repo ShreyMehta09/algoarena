@@ -1,6 +1,5 @@
 /**
- * Code Execution API Wrapper (Switched to Piston API for free, keyless, reliable execution)
- * Docs: https://github.com/engineer-man/piston
+ * Code Execution API Wrapper (onlinecompiler.io)
  */
 
 export type JudgeVerdict =
@@ -32,98 +31,92 @@ export interface SubmissionResult {
   message: string;
 }
 
-// Map frontend languages to Piston API runtimes
-const PISTON_RUNTIMES: Record<string, { language: string; version: string }> = {
-  python: { language: "python", version: "3.10.0" },
-  java: { language: "java", version: "15.0.2" },
-  cpp: { language: "c++", version: "10.2.0" },
-  c: { language: "c", version: "10.2.0" },
-  javascript: { language: "javascript", version: "18.15.0" },
-  typescript: { language: "typescript", version: "5.0.3" },
-  ruby: { language: "ruby", version: "3.0.1" },
-  rust: { language: "rust", version: "1.68.2" },
-  csharp: { language: "csharp", version: "6.12.0" },
-  go: { language: "go", version: "1.16.2" },
+const COMPILER_MAP: Record<string, string> = {
+  python: "python-3.14",
+  java: "openjdk-25",
+  cpp: "g++-15",
+  c: "gcc-15",
+  javascript: "typescript-deno", // Deno supports JS
+  typescript: "typescript-deno",
+  ruby: "ruby-4.0",
+  rust: "rust-1.93",
+  csharp: "dotnet-csharp-9",
+  go: "go-1.26",
 };
 
-/**
- * Submit a single test case to Piston API
- */
 async function submitSingle(
   code: string,
-  language: string,
-  version: string,
+  compiler: string,
   stdin: string,
-  timeLimit: number = 2
+  language: string
 ): Promise<{
   verdict: JudgeVerdict;
   stdout: string | null;
   stderr: string | null;
+  runtime: number | null;
+  memory: number | null;
 }> {
+  const apiKey = process.env.ONLINECOMPILER_API_KEY;
+  if (!apiKey) {
+    throw new Error("ONLINECOMPILER_API_KEY is not configured");
+  }
+
   const body = {
-    language,
-    version,
-    files: [{ content: code }],
-    stdin,
-    compile_timeout: 10000,
-    run_timeout: Math.max(timeLimit * 1000, 3000), // ms
+    compiler,
+    code,
+    input: stdin,
   };
 
-  const submitRes = await fetch("https://emkc.org/api/v2/piston/execute", {
+  const res = await fetch("https://api.onlinecompiler.io/api/run-code-sync/", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": apiKey, // As per our tests, it expects just the key or it works this way
+    },
     body: JSON.stringify(body),
   });
 
-  if (!submitRes.ok) {
-    throw new Error(`Piston API failed: ${submitRes.status}`);
+  if (!res.ok) {
+    throw new Error(`Execution API failed: ${res.status}`);
   }
 
-  const result = await submitRes.json();
+  const result = await res.json();
 
-  if (result.compile && result.compile.code !== 0) {
-    return {
-      verdict: "COMPILATION_ERROR",
-      stdout: null,
-      stderr: result.compile.output,
-    };
+  if (result.error && result.error.includes("Invalid or inactive API key")) {
+      throw new Error("Invalid API Key");
   }
 
-  if (result.run.code !== 0) {
-    // If it hit timeout or killed
-    if (result.run.signal === "SIGKILL" || result.run.signal === "SIGTERM") {
-      return {
-        verdict: "TIME_LIMIT_EXCEEDED",
-        stdout: result.run.stdout,
-        stderr: result.run.stderr,
-      };
-    }
+  const runtimeMs = result.time ? parseFloat(result.time) * 1000 : null;
+  const memoryKb = result.memory ? parseInt(result.memory, 10) : null;
+
+  if (result.exit_code !== 0) {
     return {
       verdict: "RUNTIME_ERROR",
-      stdout: result.run.stdout,
-      stderr: result.run.stderr || result.run.output,
+      stdout: result.output || null,
+      stderr: result.error || null,
+      runtime: runtimeMs,
+      memory: memoryKb,
     };
   }
 
   return {
     verdict: "ACCEPTED",
-    stdout: result.run.stdout,
-    stderr: result.run.stderr,
+    stdout: result.output || null,
+    stderr: result.error || null,
+    runtime: runtimeMs,
+    memory: memoryKb,
   };
 }
 
-/**
- * Run code against all test cases and return aggregated result
- */
 export async function judgeSubmission(
   code: string,
   language: string,
   testCases: Array<{ input: string; expectedOutput: string }>,
   timeLimit: number = 2,
-  memoryLimit: number = 262144 // unused by piston currently
+  memoryLimit: number = 262144
 ): Promise<SubmissionResult> {
-  const runtime = PISTON_RUNTIMES[language];
-  if (!runtime) {
+  const compiler = COMPILER_MAP[language];
+  if (!compiler) {
     return {
       verdict: "INTERNAL_ERROR",
       testsPassed: 0,
@@ -136,20 +129,15 @@ export async function judgeSubmission(
   }
 
   const results: TestCaseResult[] = [];
+  let totalRuntime = 0;
+  let maxMemory = 0;
   let firstFailVerdict: JudgeVerdict = "ACCEPTED";
   let allPassed = true;
 
   for (const tc of testCases) {
     try {
-      const raw = await submitSingle(
-        code,
-        runtime.language,
-        runtime.version,
-        tc.input,
-        timeLimit
-      );
+      const raw = await submitSingle(code, compiler, tc.input, language);
 
-      // Verify output if execution succeeded
       let verdict = raw.verdict;
       const actualOutput = raw.stdout?.trim() ?? "";
       const expectedOutput = tc.expectedOutput.trim();
@@ -167,19 +155,22 @@ export async function judgeSubmission(
         firstFailVerdict = verdict;
       }
 
+      if (raw.runtime) totalRuntime += raw.runtime;
+      if (raw.memory && raw.memory > maxMemory) maxMemory = raw.memory;
+
       results.push({
         passed,
         verdict,
-        runtime: null, // Piston does not provide precise per-test runtime metrics
-        memory: null,
+        runtime: raw.runtime,
+        memory: raw.memory,
         stdout: raw.stdout,
         stderr: raw.stderr,
         expectedOutput: tc.expectedOutput,
         actualOutput: raw.stdout?.trim() ?? null,
       });
 
-      // Stop early on compilation error
-      if (verdict === "COMPILATION_ERROR") {
+      // Stop on compilation/syntax error
+      if (verdict === "COMPILATION_ERROR" || (verdict === "RUNTIME_ERROR" && raw.stderr?.toLowerCase().includes("syntax"))) {
         for (let i = results.length; i < testCases.length; i++) {
           results.push({
             passed: false,
@@ -218,8 +209,8 @@ export async function judgeSubmission(
     verdict: finalVerdict,
     testsPassed,
     totalTests: testCases.length,
-    runtime: null,
-    memory: null,
+    runtime: totalRuntime > 0 ? Math.round(totalRuntime / results.length) : null,
+    memory: maxMemory > 0 ? maxMemory : null,
     results,
     message:
       finalVerdict === "ACCEPTED"

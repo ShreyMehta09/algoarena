@@ -139,5 +139,22 @@ function getModel<T extends Document>(name: string, schema: Schema): Model<T> {
 
 export const User = getModel<IUser>("User", UserSchema);
 export const Problem = getModel<IProblem>("Problem", ProblemSchema);
+
+// ─── Notification ────────────────────────────────────────────────────────────
+
+export interface INotification extends Document {
+  title: string;
+  message: string;
+  createdAt: Date;
+}
+
+const NotificationSchema = new Schema<INotification>({
+  title: { type: String, required: true },
+  message: { type: String, required: true },
+  createdAt: { type: Date, default: Date.now },
+});
+
+export const Notification = getModel<INotification>("Notification", NotificationSchema);
+
 export const Battle = getModel<IBattle>("Battle", BattleSchema);
 export const Submission = getModel<ISubmission>("Submission", SubmissionSchema);
