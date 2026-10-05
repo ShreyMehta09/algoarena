@@ -39,7 +39,7 @@ const MOCK_SUBMISSIONS = [
   { id: 2, status: "WRONG_ANSWER", lang: "Python 3", runtime: null, memory: null, time: "3h ago" },
 ];
 
-export default function ProblemClient({ problem }: { problem: any }) {
+export default function ProblemClient({ problem, tournamentId }: { problem: any; tournamentId?: string }) {
   const [language, setLanguage] = useState("python");
   const [code, setCode] = useState(STARTER_CODE["python"]);
   const [activeTab, setActiveTab] = useState<TabKey>("description");
@@ -70,6 +70,7 @@ export default function ProblemClient({ problem }: { problem: any }) {
           code,
           language,
           problemId: problem.id,
+          tournamentId,
           isRun,
         }),
       });

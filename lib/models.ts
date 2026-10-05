@@ -111,6 +111,7 @@ export interface ISubmission extends Document {
   userId: string;   // clerkId
   problemId: mongoose.Types.ObjectId;
   battleId?: mongoose.Types.ObjectId;
+  tournamentId?: mongoose.Types.ObjectId;
   code: string;
   language: string;
   status: string;
@@ -125,6 +126,7 @@ const SubmissionSchema = new Schema<ISubmission>(
     userId:    { type: String, required: true },
     problemId: { type: Schema.Types.ObjectId, ref: "Problem", required: true },
     battleId:  { type: Schema.Types.ObjectId, ref: "Battle" },
+    tournamentId: { type: Schema.Types.ObjectId, ref: "Tournament" },
     code:      { type: String, default: "" },
     language:  { type: String, default: "unknown" },
     status:    { type: String, required: true },
@@ -159,6 +161,71 @@ const NotificationSchema = new Schema<INotification>({
 });
 
 export const Notification = getModel<INotification>("Notification", NotificationSchema);
+
+// ─── Tournament ───────────────────────────────────────────────────────────────
+
+export interface ITournament extends Document {
+  title: string;
+  description: string;
+  startTime: Date;
+  endTime: Date;
+  problems: { problemId: mongoose.Types.ObjectId; maxScore: number }[];
+  creatorId: string; // clerkId of the creator
+  createdAt: Date;
+}
+
+const TournamentSchema = new Schema<ITournament>(
+  {
+    title: { type: String, required: true },
+    description: { type: String, required: true },
+    startTime: { type: Date, required: true },
+    endTime: { type: Date, required: true },
+    problems: [
+      {
+        problemId: { type: Schema.Types.ObjectId, ref: "Problem", required: true },
+        maxScore: { type: Number, required: true },
+      },
+    ],
+    creatorId: { type: String, required: true },
+  },
+  { timestamps: true }
+);
+
+export const Tournament = getModel<ITournament>("Tournament", TournamentSchema);
+
+// ─── TournamentParticipant ────────────────────────────────────────────────────
+
+export interface ITournamentParticipant extends Document {
+  tournamentId: mongoose.Types.ObjectId;
+  userId: string; // clerkId
+  totalScore: number;
+  totalPenalty: number;
+  problemScores: {
+    [problemId: string]: {
+      score: number;
+      attempts: number;
+      solved: boolean;
+      solvedAt?: Date;
+    };
+  };
+  createdAt: Date;
+}
+
+const TournamentParticipantSchema = new Schema<ITournamentParticipant>(
+  {
+    tournamentId: { type: Schema.Types.ObjectId, ref: "Tournament", required: true },
+    userId: { type: String, required: true },
+    totalScore: { type: Number, default: 0 },
+    totalPenalty: { type: Number, default: 0 },
+    problemScores: { type: Schema.Types.Mixed, default: {} },
+  },
+  { timestamps: true }
+);
+
+// Add unique compound index so a user can only join a tournament once
+TournamentParticipantSchema.index({ tournamentId: 1, userId: 1 }, { unique: true });
+
+export const TournamentParticipant = getModel<ITournamentParticipant>("TournamentParticipant", TournamentParticipantSchema);
 
 export const Battle = getModel<IBattle>("Battle", BattleSchema);
 export const Submission = getModel<ISubmission>("Submission", SubmissionSchema);

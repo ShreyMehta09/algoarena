@@ -43,6 +43,15 @@ export default async function AdminOverviewPage() {
       bg: "bg-yellow-400/10",
       border: "border-yellow-400/20"
     },
+    {
+      title: "Tournaments",
+      description: "Create and manage competitive tournaments.",
+      icon: Trophy, // Reusing trophy or another icon like Swords
+      href: "/admin/tournaments",
+      color: "text-brand-cyan",
+      bg: "bg-brand-cyan/10",
+      border: "border-brand-cyan/20"
+    },
     ...(isAdmin ? [{
       title: "System Notifications",
       description: "Send global announcements to all online users.",

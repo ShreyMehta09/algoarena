@@ -22,6 +22,7 @@ const navItems = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/problems", label: "Practice", icon: Code2 },
   { href: "/battle", label: "Arena", icon: Swords },
+  { href: "/tournaments", label: "Tournaments", icon: Trophy },
   { href: "/leaderboard", label: "Leaderboard", icon: Trophy },
 ];
 
@@ -87,6 +88,15 @@ export default function Navbar() {
                 </Link>
               );
             })}
+            
+            {userProfile && (userProfile as any).role === "ADMIN" && (
+              <Link
+                href="/admin"
+                className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium text-red-400 hover:text-red-300 hover:bg-red-400/10 transition-all duration-200"
+              >
+                Admin
+              </Link>
+            )}
           </nav>
 
           {/* Right Section */}
