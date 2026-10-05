@@ -1,19 +1,24 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
+import { useUser } from "@clerk/nextjs";
 import {
   Swords,
   Zap,
   X,
-  Shield,
   Clock,
   Users,
   Star,
+  Wifi,
+  WifiOff,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { MOCK_USER, MOCK_PROBLEMS } from "@/lib/mock-data";
 import { getRankFromRating, cn } from "@/lib/utils";
+import {
+  useMatchmakingSocket,
+  type MatchmakingEvent,
+} from "@/lib/hooks/useBattleSocket";
 
 const RANK_RANGES = [
   { label: "±50", range: 50 },
@@ -26,13 +31,49 @@ const DIFFICULTIES = ["Any", "Easy", "Medium", "Hard"] as const;
 
 export default function BattlePage() {
   const router = useRouter();
+  const { user: clerkUser, isLoaded } = useUser();
+  const [profile, setProfile] = useState<{ username: string; rating: number; wins: number } | null>(null);
   const [searching, setSearching] = useState(false);
   const [elapsed, setElapsed] = useState(0);
   const [ratingRange, setRatingRange] = useState(100);
   const [difficulty, setDifficulty] = useState<string>("Any");
   const [dots, setDots] = useState(1);
+  const [opponent, setOpponent] = useState<{ username: string; rating: number } | null>(null);
+  const [matchFound, setMatchFound] = useState(false);
 
-  const rank = getRankFromRating(MOCK_USER.rating);
+  useEffect(() => {
+    if (!clerkUser) return;
+    fetch("/api/user/me")
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.user) setProfile({ username: data.user.username, rating: data.user.rating, wins: data.user.wins });
+      })
+      .catch(() => {});
+  }, [clerkUser]);
+
+  const userId = clerkUser?.id;
+  const username = profile?.username || clerkUser?.username || clerkUser?.firstName || "Player";
+  const rating = profile?.rating ?? 1200;
+  const wins = profile?.wins ?? 0;
+  const rank = getRankFromRating(rating);
+
+  const handleSocketEvent = useCallback(
+    (event: MatchmakingEvent) => {
+      if (event.type === "match:found") {
+        setMatchFound(true);
+        setOpponent(event.opponent);
+        // Brief delay to show "Match Found!" before redirect
+        setTimeout(() => {
+          router.push(`/battle/${event.battleId}`);
+        }, 1500);
+      }
+    },
+    [router]
+  );
+
+  const { connected, joinQueue, leaveQueue } = useMatchmakingSocket({
+    onEvent: handleSocketEvent,
+  });
 
   useEffect(() => {
     let timer: NodeJS.Timeout;
@@ -41,34 +82,45 @@ export default function BattlePage() {
         setElapsed((e) => e + 1);
         setDots((d) => (d % 3) + 1);
       }, 1000);
-
-      // Simulate match found after 5-8 seconds
-      const matchTimer = setTimeout(
-        () => {
-          router.push("/battle/live-demo");
-        },
-        5000 + Math.random() * 3000
-      );
-
-      return () => {
-        clearInterval(timer);
-        clearTimeout(matchTimer);
-      };
     } else {
       setElapsed(0);
     }
     return () => clearInterval(timer);
-  }, [searching, router]);
+  }, [searching]);
+
+  const startSearch = () => {
+    if (!userId) return;
+    setSearching(true);
+    setMatchFound(false);
+    setOpponent(null);
+    joinQueue({
+      userId,
+      username,
+      rating,
+      ratingRange,
+      difficulty,
+    });
+  };
+
+  const cancelSearch = () => {
+    setSearching(false);
+    setMatchFound(false);
+    leaveQueue();
+  };
 
   const formatElapsed = (s: number) => {
     const m = Math.floor(s / 60);
     const sec = s % 60;
-    return m > 0
-      ? `${m}:${String(sec).padStart(2, "0")}`
-      : `${sec}s`;
+    return m > 0 ? `${m}:${String(sec).padStart(2, "0")}` : `${sec}s`;
   };
 
-  const ONLINE_COUNT = 847 + Math.floor(Math.random() * 20);
+  if (!isLoaded) {
+    return (
+      <div className="min-h-[80vh] flex items-center justify-center">
+        <div className="w-8 h-8 rounded-full border-2 border-brand-cyan border-t-transparent animate-spin" />
+      </div>
+    );
+  }
 
   return (
     <div className="page-transition min-h-[80vh] flex items-center justify-center">
@@ -79,8 +131,8 @@ export default function BattlePage() {
             <span className="text-gradient">1v1</span> Battle Arena
           </h1>
           <div className="flex items-center justify-center gap-2 text-sm text-slate-500">
-            <span className="w-2 h-2 rounded-full bg-green-400 animate-ping-slow" />
-            {ONLINE_COUNT} coders online
+            <span className={cn("w-2 h-2 rounded-full", connected ? "bg-green-400 animate-ping-slow" : "bg-slate-600")} />
+            {connected ? "Connected to matchmaking" : "Connecting..."}
           </div>
         </div>
 
@@ -89,15 +141,15 @@ export default function BattlePage() {
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-4">
               <div className="w-14 h-14 rounded-2xl bg-gradient-brand flex items-center justify-center text-xl font-black text-white shadow-glow-purple">
-                {MOCK_USER.name.charAt(0)}
+                {username.charAt(0).toUpperCase()}
               </div>
               <div>
-                <div className="text-base font-bold text-white">{MOCK_USER.name}</div>
-                <div className="text-sm text-slate-500">@{MOCK_USER.username}</div>
+                <div className="text-base font-bold text-white">{clerkUser?.firstName || username}</div>
+                <div className="text-sm text-slate-500">@{username}</div>
               </div>
             </div>
             <div className="text-right">
-              <div className="text-2xl font-black text-white">{MOCK_USER.rating}</div>
+              <div className="text-2xl font-black text-white">{rating}</div>
               <div className={cn("text-sm font-semibold", rank.class)}>{rank.rank}</div>
             </div>
           </div>
@@ -114,7 +166,7 @@ export default function BattlePage() {
                 <div className="flex items-center justify-between mb-2">
                   <label className="text-xs text-slate-400 font-medium">Rating Range</label>
                   <span className="text-xs text-brand-cyan">
-                    {MOCK_USER.rating - ratingRange} – {MOCK_USER.rating + ratingRange}
+                    {rating - ratingRange} – {rating + ratingRange}
                   </span>
                 </div>
                 <div className="flex gap-2">
@@ -168,9 +220,9 @@ export default function BattlePage() {
             {/* Stats row */}
             <div className="grid grid-cols-3 gap-3">
               {[
-                { label: "Avg Wait", value: "< 30s", icon: Clock },
-                { label: "Opponents", value: "2,341", icon: Users },
-                { label: "Your Wins", value: `${MOCK_USER.wins}`, icon: Star },
+                { label: "Avg Wait", value: "<30s", icon: Clock },
+                { label: "Online Now", value: "—", icon: Users },
+                { label: "Your Wins", value: `${wins}`, icon: Star },
               ].map((item) => {
                 const Icon = item.icon;
                 return (
@@ -183,17 +235,37 @@ export default function BattlePage() {
               })}
             </div>
 
+            {/* Connection warning */}
+            {!connected && (
+              <div className="flex items-center gap-2 px-4 py-3 rounded-xl bg-yellow-400/10 border border-yellow-400/20 text-xs text-yellow-400">
+                <WifiOff className="w-4 h-4" />
+                Socket server not reachable. Make sure you started with <code className="font-mono">npm run dev</code>.
+              </div>
+            )}
+
             {/* Find match button */}
             <Button
               fullWidth
               size="lg"
-              onClick={() => setSearching(true)}
+              onClick={startSearch}
+              disabled={!connected}
               className="text-white text-base py-4 rounded-2xl"
             >
               <Swords className="w-5 h-5" />
               Find Match
             </Button>
           </>
+        ) : matchFound ? (
+          /* Match found state */
+          <div className="glass rounded-2xl border border-green-400/30 bg-green-400/5 p-10 text-center space-y-4 animate-fade-in">
+            <div className="text-4xl">⚔️</div>
+            <div className="text-xl font-black text-green-400">Match Found!</div>
+            <div className="text-sm text-slate-400">
+              vs <span className="text-white font-bold">{opponent?.username}</span>{" "}
+              <span className="text-slate-500">({opponent?.rating} Elo)</span>
+            </div>
+            <div className="text-xs text-slate-500">Redirecting to battle room...</div>
+          </div>
         ) : (
           /* Searching state */
           <div className="glass rounded-2xl border border-brand-cyan/20 bg-brand-cyan/5 p-10 text-center space-y-6">
@@ -224,14 +296,14 @@ export default function BattlePage() {
               Searching for {formatElapsed(elapsed)}
             </div>
 
-            {/* Searching opponent card */}
+            {/* Player vs ? */}
             <div className="flex items-center justify-center gap-6">
               <div className="flex flex-col items-center gap-2">
                 <div className="w-12 h-12 rounded-xl bg-gradient-brand flex items-center justify-center text-base font-bold text-white">
-                  {MOCK_USER.name.charAt(0)}
+                  {username.charAt(0)}
                 </div>
-                <div className="text-xs text-slate-400">{MOCK_USER.username}</div>
-                <div className="text-xs font-bold text-brand-cyan">{MOCK_USER.rating}</div>
+                <div className="text-xs text-slate-400">{username}</div>
+                <div className="text-xs font-bold text-brand-cyan">{rating}</div>
               </div>
 
               <div className="text-2xl font-black text-gradient">VS</div>
@@ -242,16 +314,12 @@ export default function BattlePage() {
                 </div>
                 <div className="text-xs text-slate-600">Searching...</div>
                 <div className="text-xs font-bold text-slate-600">
-                  ~{MOCK_USER.rating - ratingRange}–{MOCK_USER.rating + ratingRange}
+                  ~{rating - ratingRange}–{rating + ratingRange}
                 </div>
               </div>
             </div>
 
-            <Button
-              variant="ghost"
-              onClick={() => setSearching(false)}
-              className="mx-auto"
-            >
+            <Button variant="ghost" onClick={cancelSearch} className="mx-auto">
               <X className="w-4 h-4" />
               Cancel Search
             </Button>
@@ -261,4 +329,3 @@ export default function BattlePage() {
     </div>
   );
 }
-

@@ -1,56 +1,79 @@
 import { NextRequest, NextResponse } from "next/server";
-
-// Simulated code execution endpoint
-// In production this would call Judge0 API or a custom Docker runner
-
-const SIMULATED_RESULTS: Record<string, { status: string; runtime: number; memory: number }> = {
-  correct: { status: "ACCEPTED", runtime: 52, memory: 14200 },
-  wrong: { status: "WRONG_ANSWER", runtime: 0, memory: 0 },
-  tle: { status: "TIME_LIMIT_EXCEEDED", runtime: 2001, memory: 0 },
-  re: { status: "RUNTIME_ERROR", runtime: 0, memory: 0 },
-};
+import { auth } from "@clerk/nextjs/server";
+import dbConnect from "@/lib/mongodb";
+import { Problem, Submission } from "@/lib/models";
+import { judgeSubmission } from "@/lib/judge0";
 
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json();
-    const { code, language, problemId, mode } = body;
+    const { userId } = await auth();
+    if (!userId) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
 
-    if (!code || !language) {
+    const body = await request.json();
+    const { code, language, problemId, battleId } = body;
+
+    if (!code || !language || !problemId) {
       return NextResponse.json(
-        { error: "Code and language are required" },
+        { error: "code, language, and problemId are required" },
         { status: 400 }
       );
     }
 
-    // Simulate execution delay
-    await new Promise((r) => setTimeout(r, 1500 + Math.random() * 1000));
+    await dbConnect;
 
-    // Simple heuristic: if code is longer than 50 chars and not empty, pass it
-    const isLikelyCorrect =
-      code.length > 50 &&
-      !code.includes("pass") &&
-      !code.includes("return 0") &&
-      !code.includes("TODO");
+    // Fetch problem and test cases from DB
+    const problem = await Problem.findById(problemId, "testCases timeLimit memoryLimit").lean();
 
-    const result = isLikelyCorrect
-      ? SIMULATED_RESULTS.correct
-      : SIMULATED_RESULTS.wrong;
+    if (!problem) {
+      return NextResponse.json({ error: "Problem not found" }, { status: 404 });
+    }
 
-    return NextResponse.json({
-      status: result.status,
+    const testCases = problem.testCases ?? [];
+
+    if (testCases.length === 0) {
+      return NextResponse.json({ error: "No test cases available" }, { status: 500 });
+    }
+
+    // Run through Judge0
+    const result = await judgeSubmission(
+      code,
+      language,
+      testCases.map((tc) => ({ input: tc.input, expectedOutput: tc.expectedOutput })),
+      problem.timeLimit / 1000, // convert ms → seconds for Judge0
+      problem.memoryLimit * 1024 // convert MB → KB for Judge0
+    );
+
+    // Store submission record
+    await Submission.create({
+      userId,
+      problemId: problem._id,
+      battleId: battleId ?? null,
+      code,
+      language,
+      status: result.verdict,
       runtime: result.runtime,
       memory: result.memory,
-      testsPassed: isLikelyCorrect ? 10 : Math.floor(Math.random() * 7),
-      totalTests: 10,
-      message:
-        result.status === "ACCEPTED"
-          ? "All test cases passed!"
-          : "Some test cases failed.",
+      score: 0, // Battle socket handler sets actual Elo delta
     });
-  } catch {
-    return NextResponse.json(
-      { error: "Internal server error" },
-      { status: 500 }
-    );
+
+    return NextResponse.json({
+      verdict: result.verdict,
+      testsPassed: result.testsPassed,
+      totalTests: result.totalTests,
+      runtime: result.runtime,
+      memory: result.memory,
+      message: result.message,
+      results: result.results.map((r) => ({
+        passed: r.passed,
+        verdict: r.verdict,
+        runtime: r.runtime,
+        // Don't expose exact test inputs/expected outputs to client
+      })),
+    });
+  } catch (err) {
+    console.error("[Execute] Error:", err);
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }

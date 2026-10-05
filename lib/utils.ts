@@ -14,15 +14,17 @@ export function getRankFromRating(rating: number): {
   color: string;
   class: string;
 } {
-  if (rating < 1000)
-    return { rank: "Bronze", color: "#cd7f32", class: "rank-bronze" };
+  if (rating <= 1000)
+    return { rank: "Unranked", color: "", class: "text-slate-500" };
   if (rating < 1200)
-    return { rank: "Silver", color: "#c0c0c0", class: "rank-silver" };
+    return { rank: "Bronze", color: "#cd7f32", class: "rank-bronze" };
   if (rating < 1500)
-    return { rank: "Gold", color: "#ffd700", class: "rank-gold" };
+    return { rank: "Silver", color: "#c0c0c0", class: "rank-silver" };
   if (rating < 1800)
-    return { rank: "Platinum", color: "#00d4ff", class: "rank-platinum" };
+    return { rank: "Gold", color: "#ffd700", class: "rank-gold" };
   if (rating < 2100)
+    return { rank: "Platinum", color: "#00d4ff", class: "rank-platinum" };
+  if (rating < 2400)
     return { rank: "Diamond", color: "#9f67ff", class: "rank-diamond" };
   return { rank: "Master", color: "#ff6b35", class: "rank-master" };
 }

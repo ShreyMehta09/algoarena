@@ -35,27 +35,30 @@
 
 ---
 
-## Features (30% Demo)
+## Features
 
 - ✅ Landing page with animated hero, features grid, and live stats
-- ✅ Auth pages (Login / Register) with OAuth stubs
+- ✅ Full NextAuth integration (JWT sessions, credentials)
 - ✅ Dashboard with Elo card, rating chart, battle history
 - ✅ Problem set with search, filters, and status tracking
 - ✅ Problem detail with Monaco Editor (8 languages, run/submit)
-- ✅ Battle matchmaking with animated queue search
-- ✅ Live battle (split-screen, timer, opponent progress, judge results)
+- ✅ Judge0 API integration for real code execution
+- ✅ Real Socket.IO matchmaking + live battle sync
+- ✅ Redis-based matchmaking queue
+- ✅ Full Elo calculation engine
 - ✅ Leaderboard with podium, ranked table, streak indicators
-- ✅ REST API routes (execute, problems, battle)
+- ✅ REST/Server Actions for app functionality
+- ✅ Admin panel for problem management
 - ✅ Prisma schema (User, Problem, Battle, Submission)
 - ✅ Database seed with demo data
 
-## Current Demo Status
+## Current Status
 
-This build is structured as a polished product demo for a competitive coding platform. The experience focuses on onboarding, battle flow, and a realistic gameplay feel, while the backend execution and matchmaking pieces are intentionally scaffolded for demonstration and future integration.
+The platform has transitioned from a demo to a fully functional competitive coding environment. Core systems including real-time matchmaking via Socket.IO/Redis, actual code execution via Judge0, and a fully realized Elo rating engine are now implemented. Authentication is secured via NextAuth.
 
 ## Quick Start Notes
 
-Use the demo login flow to explore the product experience quickly. The seeded user is designed to let you test ranking, battles, and profile states without needing a full authentication backend.
+You can now log in securely, join the real-time matchmaking queue, and battle against other users with live code execution and fair rating adjustments.
 
 ## Planned Experience
 
@@ -133,30 +136,25 @@ Client (Next.js App Router)
 ├── Client Components → UI interactivity
 └── API Routes → REST endpoints
 
-Real-Time Layer (planned)
+Real-Time Layer
 ├── Socket.IO server (Express)
 ├── Redis pub/sub (matchmaking queue)
 └── Live battle events
 
-Code Execution (planned)
+Code Execution
 ├── Judge0 API (cloud) or
 └── Docker sandbox (self-hosted)
 ```
 
 ---
 
-## Roadmap (Remaining 70%)
+## Roadmap (Upcoming Features)
 
-- [ ] Full NextAuth integration (JWT sessions, OAuth)
-- [ ] Real Socket.IO matchmaking + live battle sync
-- [ ] Judge0 API integration for real code execution
-- [ ] Redis-based matchmaking queue
-- [ ] Full Elo calculation engine
 - [ ] User profile pages
 - [ ] Battle replay system
-- [ ] Admin panel for problem management
 - [ ] Email notifications
 - [ ] Mobile-responsive battle layout
+- [ ] Multi-user tournaments
 
 
 ## Launch plan

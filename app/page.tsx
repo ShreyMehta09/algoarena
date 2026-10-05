@@ -1,7 +1,7 @@
-"use client";
-
 import Link from "next/link";
-import { useState, useEffect } from "react";
+import { CountUp } from "@/components/count-up";
+import dbConnect from "@/lib/mongodb";
+import { User, Battle, Problem } from "@/lib/models";
 import {
   Zap,
   Swords,
@@ -81,39 +81,22 @@ const STEPS = [
   },
 ];
 
-const STATS = [
-  { label: "Active Coders", value: 12847, suffix: "+" },
-  { label: "Battles Fought", value: 94321, suffix: "+" },
-  { label: "Problems Available", value: 500, suffix: "+" },
-  { label: "Languages Supported", value: 8, suffix: "" },
-];
+export default async function LandingPage() {
+  await dbConnect;
 
-function CountUp({ target, suffix }: { target: number; suffix: string }) {
-  const [count, setCount] = useState(0);
+  const [activeCoders, battlesFought, problemsAvailable, activeBattles] = await Promise.all([
+    User.countDocuments(),
+    Battle.countDocuments({ status: "FINISHED" }),
+    Problem.countDocuments(),
+    Battle.countDocuments({ status: "ACTIVE" }),
+  ]);
 
-  useEffect(() => {
-    const step = target / 60;
-    const timer = setInterval(() => {
-      setCount((prev) => {
-        if (prev + step >= target) {
-          clearInterval(timer);
-          return target;
-        }
-        return Math.floor(prev + step);
-      });
-    }, 16);
-    return () => clearInterval(timer);
-  }, [target]);
-
-  return (
-    <span>
-      {count.toLocaleString()}
-      {suffix}
-    </span>
-  );
-}
-
-export default function LandingPage() {
+  const STATS = [
+    { label: "Active Coders", value: activeCoders, suffix: "" },
+    { label: "Battles Fought", value: battlesFought, suffix: "" },
+    { label: "Problems Available", value: problemsAvailable, suffix: "" },
+    { label: "Languages Supported", value: 8, suffix: "" },
+  ];
   return (
     <div className="min-h-screen bg-dark-950 bg-grid overflow-x-hidden">
       {/* Navbar */}
@@ -138,13 +121,13 @@ export default function LandingPage() {
           </nav>
           <div className="flex items-center gap-3">
             <Link
-              href="/login"
+              href="/sign-in"
               className="text-sm text-slate-400 hover:text-slate-200 transition-colors font-medium"
             >
               Log in
             </Link>
             <Link
-              href="/register"
+              href="/sign-up"
               className="btn-primary text-sm px-4 py-2 rounded-xl text-white"
             >
               Get Started
@@ -160,15 +143,14 @@ export default function LandingPage() {
         <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-brand-cyan/8 rounded-full blur-3xl animate-pulse2 [animation-delay:1s]" />
 
         <div className="relative z-10 max-w-5xl mx-auto px-6 text-center">
-          {/* Live badge */}
           <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full glass border border-brand-cyan/20 text-xs text-brand-cyan font-medium mb-8 animate-fade-in">
             <span className="w-2 h-2 rounded-full bg-brand-cyan animate-ping-slow" />
-            847 battles happening right now
+            {activeBattles} battles happening right now
           </div>
 
-          <div className="mb-6 text-xs font-semibold uppercase tracking-[0.28em] text-slate-400">
-            Trusted by 12k+ competitive programmers
-          </div>
+          {/* <div className="mb-6 text-xs font-semibold uppercase tracking-[0.28em] text-slate-400">
+            Trusted by {activeCoders}+ competitive programmers
+          </div> */}
 
           <h1 className="text-5xl sm:text-6xl lg:text-7xl font-black tracking-tight mb-6 animate-slide-up">
             Code.{" "}
@@ -197,7 +179,7 @@ export default function LandingPage() {
 
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4 animate-slide-up [animation-delay:0.2s]">
             <Link
-              href="/register"
+              href="/sign-up"
               className="btn-primary group flex items-center gap-2 px-8 py-4 rounded-2xl text-base text-white"
             >
               <Play className="w-4 h-4" fill="white" />
@@ -323,16 +305,14 @@ export default function LandingPage() {
                 style={{ animationDelay: `${i * 0.05}s` }}
               >
                 <div
-                  className={`w-11 h-11 rounded-xl flex items-center justify-center mb-4 transition-all duration-300 group-hover:scale-110 ${
-                    feature.color === "cyan"
-                      ? "bg-brand-cyan/10 border border-brand-cyan/20"
-                      : "bg-brand-purple/10 border border-brand-purple/20"
-                  }`}
+                  className={`w-11 h-11 rounded-xl flex items-center justify-center mb-4 transition-all duration-300 group-hover:scale-110 ${feature.color === "cyan"
+                    ? "bg-brand-cyan/10 border border-brand-cyan/20"
+                    : "bg-brand-purple/10 border border-brand-purple/20"
+                    }`}
                 >
                   <Icon
-                    className={`w-5 h-5 ${
-                      feature.color === "cyan" ? "text-brand-cyan" : "text-brand-purple-light"
-                    }`}
+                    className={`w-5 h-5 ${feature.color === "cyan" ? "text-brand-cyan" : "text-brand-purple-light"
+                      }`}
                   />
                 </div>
                 <h3 className="text-base font-bold text-slate-100 mb-2">
@@ -391,7 +371,7 @@ export default function LandingPage() {
               Join thousands of competitive programmers. Free forever, no credit card required.
             </p>
             <Link
-              href="/register"
+              href="/sign-up"
               className="btn-primary inline-flex items-center gap-2 px-10 py-4 rounded-2xl text-base text-white"
             >
               <Zap className="w-4 h-4" />

@@ -2,22 +2,21 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useUser, useClerk } from "@clerk/nextjs";
 import {
   Zap,
   LayoutDashboard,
   Code2,
   Swords,
   Trophy,
-  User,
   LogOut,
   Menu,
   X,
   Bell,
+  Loader2,
 } from "lucide-react";
-import { cn } from "@/lib/utils";
-import { MOCK_USER } from "@/lib/mock-data";
-import { getRankFromRating } from "@/lib/utils";
+import { cn, getRankFromRating } from "@/lib/utils";
 
 const navItems = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
@@ -28,8 +27,30 @@ const navItems = [
 
 export default function Navbar() {
   const pathname = usePathname();
+  const { user, isLoaded } = useUser();
+  const { signOut } = useClerk();
   const [mobileOpen, setMobileOpen] = useState(false);
-  const rank = getRankFromRating(MOCK_USER.rating);
+  const [userProfile, setUserProfile] = useState<{ rating: number; username: string } | null>(null);
+
+  // Fetch extra profile data (rating, username) from MongoDB via API
+  useEffect(() => {
+    if (!user) return;
+    fetch("/api/user/me")
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.user) setUserProfile({ rating: data.user.rating, username: data.user.username });
+      })
+      .catch(() => {});
+  }, [user]);
+
+  const rating = userProfile?.rating ?? 1200;
+  const rank = getRankFromRating(rating);
+  const displayName = userProfile?.username || user?.username || user?.firstName || "User";
+  const initial = displayName.charAt(0).toUpperCase();
+
+  const handleLogout = async () => {
+    await signOut({ redirectUrl: "/sign-in" });
+  };
 
   return (
     <header className="sticky top-0 z-50 w-full glass border-b border-white/[0.06]">
@@ -77,30 +98,41 @@ export default function Navbar() {
             </button>
 
             {/* User chip */}
-            <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg glass border border-white/[0.06] hover:border-brand-cyan/20 transition-all cursor-pointer group">
-              <div className="w-7 h-7 rounded-full bg-gradient-brand flex items-center justify-center text-xs font-bold text-white">
-                {MOCK_USER.name.charAt(0)}
+            {!isLoaded ? (
+              <div className="w-9 h-9 rounded-lg flex items-center justify-center">
+                <Loader2 className="w-4 h-4 animate-spin text-slate-500" />
               </div>
-              <div className="flex flex-col">
-                <span className="text-sm font-medium text-slate-200 leading-none">
-                  {MOCK_USER.username}
-                </span>
-                <span className={cn("text-xs leading-none mt-0.5", rank.class)}>
-                  {rank.rank} · {MOCK_USER.rating}
-                </span>
+            ) : user ? (
+              <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg glass border border-white/[0.06] hover:border-brand-cyan/20 transition-all cursor-pointer group">
+                {user.imageUrl ? (
+                  <img
+                    src={user.imageUrl}
+                    alt={displayName}
+                    className="w-7 h-7 rounded-full object-cover"
+                  />
+                ) : (
+                  <div className="w-7 h-7 rounded-full bg-gradient-brand flex items-center justify-center text-xs font-bold text-white">
+                    {initial}
+                  </div>
+                )}
+                <div className="flex flex-col">
+                  <span className="text-sm font-medium text-slate-200 leading-none">
+                    {displayName}
+                  </span>
+                  <span className={cn("text-xs leading-none mt-0.5", rank.class)}>
+                    {rank.rank} · {rating}
+                  </span>
+                </div>
               </div>
-            </div>
+            ) : null}
 
-            <button className="flex items-center justify-center rounded-lg border border-white/[0.08] bg-white/[0.02] px-2.5 py-2 text-xs font-medium text-slate-300 transition hover:border-brand-cyan/30 hover:text-brand-cyan">
-              Pro
-            </button>
-
-            <Link
-              href="/login"
+            <button
+              onClick={handleLogout}
               className="w-9 h-9 rounded-lg flex items-center justify-center text-slate-500 hover:text-red-400 hover:bg-red-400/10 transition-all"
+              title="Sign out"
             >
               <LogOut className="w-4 h-4" />
-            </Link>
+            </button>
           </div>
 
           {/* Mobile toggle */}
@@ -137,17 +169,36 @@ export default function Navbar() {
               );
             })}
           </div>
-          <div className="px-4 py-3 border-t border-white/[0.06]">
-            <div className="flex items-center gap-3 px-3 py-2">
-              <div className="w-8 h-8 rounded-full bg-gradient-brand flex items-center justify-center text-sm font-bold text-white">
-                {MOCK_USER.name.charAt(0)}
-              </div>
-              <div>
-                <p className="text-sm font-medium text-slate-200">{MOCK_USER.name}</p>
-                <p className={cn("text-xs", rank.class)}>{rank.rank} · {MOCK_USER.rating}</p>
+          {user && (
+            <div className="px-4 py-3 border-t border-white/[0.06]">
+              <div className="flex items-center justify-between px-3 py-2">
+                <div className="flex items-center gap-3">
+                  {user.imageUrl ? (
+                    <img
+                      src={user.imageUrl}
+                      alt={displayName}
+                      className="w-8 h-8 rounded-full object-cover"
+                    />
+                  ) : (
+                    <div className="w-8 h-8 rounded-full bg-gradient-brand flex items-center justify-center text-sm font-bold text-white">
+                      {initial}
+                    </div>
+                  )}
+                  <div>
+                    <p className="text-sm font-medium text-slate-200">{displayName}</p>
+                    <p className={cn("text-xs", rank.class)}>{rank.rank} · {rating}</p>
+                  </div>
+                </div>
+                <button
+                  onClick={handleLogout}
+                  className="flex items-center gap-1.5 text-xs text-slate-500 hover:text-red-400 transition-colors"
+                >
+                  <LogOut className="w-3.5 h-3.5" />
+                  Sign out
+                </button>
               </div>
             </div>
-          </div>
+          )}
         </div>
       )}
     </header>
