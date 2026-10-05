@@ -9,6 +9,7 @@ export type BattleEvent =
   | { type: "opponent:progress"; progress: number; linesOfCode: number }
   | { type: "opponent:submitted"; verdict: string; testsPassed: number; totalTests: number }
   | { type: "battle:winner"; winnerId: string; winnerUsername: string; eloChanges: Record<string, { delta: number; newRating: number }> }
+  | { type: "battle:first_finish"; winnerId: string; message: string }
   | { type: "battle:timeout"; message: string }
   | { type: "battle:opponent_left"; username: string }
   | { type: "battle:timer"; timeLeft: number }
@@ -71,6 +72,10 @@ export function useBattleSocket({
 
     socket.on("battle:winner", (data: { winnerId: string; winnerUsername: string; eloChanges: Record<string, { delta: number; newRating: number }> }) => {
       onEvent({ type: "battle:winner", ...data });
+    });
+
+    socket.on("battle:first_finish", (data: { winnerId: string; message: string }) => {
+      onEvent({ type: "battle:first_finish", ...data });
     });
 
     socket.on("battle:timeout", ({ message }: { message: string }) => {

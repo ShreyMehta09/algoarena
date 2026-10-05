@@ -84,6 +84,7 @@ export default function LiveBattlePage({
     message: string;
     eloChange?: number;
     newRating?: number;
+    results?: any[];
   } | null>(null);
   const [showLangMenu, setShowLangMenu] = useState(false);
 
@@ -97,6 +98,7 @@ export default function LiveBattlePage({
 
   // Battle end
   const [battleEnded, setBattleEnded] = useState(false);
+  const [firstFinisher, setFirstFinisher] = useState<string | null>(null);
   const [winnerInfo, setWinnerInfo] = useState<{
     winnerId: string;
     winnerUsername: string;
@@ -148,6 +150,12 @@ export default function LiveBattlePage({
         case "battle:winner":
           setBattleEnded(true);
           setWinnerInfo(event);
+          break;
+        case "battle:first_finish":
+          setFirstFinisher(event.winnerId);
+          if (event.winnerId !== userId) {
+            setOpponentSubmitted(true);
+          }
           break;
         case "battle:timeout":
           setBattleEnded(true);
@@ -234,6 +242,7 @@ export default function LiveBattlePage({
         runtime: data.runtime,
         memory: data.memory,
         message: data.message,
+        results: data.results,
       });
 
       if (verdict === "ACCEPTED") {
@@ -263,6 +272,64 @@ export default function LiveBattlePage({
           testsPassed: data.testsPassed,
           totalTests: data.totalTests,
         });
+      }
+    } catch {
+      setSubmitState("error");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleRun = async () => {
+    if (!battle || !userId || submitting) return;
+
+    setSubmitting(true);
+    setSubmitState("running");
+    setSubmitResult(null);
+
+    try {
+      const res = await fetch("/api/execute", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          code,
+          language,
+          problemId: battle.problem.id,
+          battleId,
+          isRun: true,
+        }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        setSubmitState("error");
+        setSubmitting(false);
+        return;
+      }
+
+      const verdict = data.verdict as string;
+
+      setSubmitResult({
+        testsPassed: data.testsPassed,
+        totalTests: data.totalTests,
+        runtime: data.runtime,
+        memory: data.memory,
+        message: data.message,
+        results: data.results,
+      });
+
+      if (verdict === "ACCEPTED") {
+        setSubmitState("accepted");
+      } else {
+        const stateMap: Record<string, SubmitState> = {
+          WRONG_ANSWER: "wrong",
+          TIME_LIMIT_EXCEEDED: "tle",
+          RUNTIME_ERROR: "re",
+          COMPILATION_ERROR: "ce",
+          INTERNAL_ERROR: "error",
+        };
+        setSubmitState(stateMap[verdict] || "wrong");
       }
     } catch {
       setSubmitState("error");
@@ -412,10 +479,16 @@ export default function LiveBattlePage({
             />
           </div>
         </div>
-        {opponentSubmitted && (
+        {opponentSubmitted && !firstFinisher && (
           <div className="flex items-center gap-1.5 text-xs text-orange-400 font-semibold animate-fade-in">
             <Swords className="w-3 h-3" />
-            Opponent submitted!
+            Opponent is submitting...
+          </div>
+        )}
+        {firstFinisher === opponent?.id && (
+          <div className="flex items-center gap-1.5 text-xs text-green-400 font-semibold animate-fade-in">
+            <Trophy className="w-3 h-3" />
+            Opponent solved it! You still have time.
           </div>
         )}
       </div>
@@ -507,17 +580,29 @@ export default function LiveBattlePage({
               )}
             </div>
 
-            <Button
-              variant="primary"
-              size="sm"
-              onClick={handleSubmit}
-              loading={submitting}
-              disabled={submitting || battleEnded}
-              className="text-white"
-            >
-              <Send className="w-3.5 h-3.5" />
-              Submit
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleRun}
+                loading={submitting}
+                disabled={submitting || battleEnded}
+                className="text-slate-300 hover:text-white"
+              >
+                Run Code
+              </Button>
+              <Button
+                variant="primary"
+                size="sm"
+                onClick={handleSubmit}
+                loading={submitting}
+                disabled={submitting || battleEnded || firstFinisher === userId}
+                className="text-white"
+              >
+                <Send className="w-3.5 h-3.5" />
+                {firstFinisher === userId ? "Solved" : "Submit"}
+              </Button>
+            </div>
           </div>
 
           {/* Monaco */}
@@ -582,23 +667,40 @@ export default function LiveBattlePage({
                 </div>
               )}
               {(submitState === "wrong" || submitState === "tle" || submitState === "re" || submitState === "ce") && submitResult && (
-                <div className="flex items-center gap-2 text-red-400 text-xs">
-                  <XCircle className="w-3.5 h-3.5" />
-                  <span className="font-medium">
-                    {submitState === "wrong" && "Wrong Answer"}
-                    {submitState === "tle" && "Time Limit Exceeded"}
-                    {submitState === "re" && "Runtime Error"}
-                    {submitState === "ce" && "Compilation Error"}
-                  </span>
-                  <span className="text-slate-500">
-                    — {submitResult.testsPassed}/{submitResult.totalTests} tests passed
-                  </span>
+                <div className="space-y-3">
+                  <div className="flex items-center gap-2 text-red-400 text-xs">
+                    <XCircle className="w-3.5 h-3.5" />
+                    <span className="font-medium">
+                      {submitState === "wrong" && "Wrong Answer"}
+                      {submitState === "tle" && "Time Limit Exceeded"}
+                      {submitState === "re" && "Runtime Error"}
+                      {submitState === "ce" && "Compilation Error"}
+                    </span>
+                    <span className="text-slate-500">
+                      — {submitResult.testsPassed}/{submitResult.totalTests} tests passed
+                    </span>
+                  </div>
+                  {submitResult.results?.filter((r: any) => !r.passed).map((r: any, idx: number) => (
+                    <div key={idx} className="bg-black/40 rounded-lg p-3 text-xs font-mono overflow-auto border border-red-400/10 max-h-32">
+                      {r.stderr && (
+                        <div className="text-red-400 whitespace-pre-wrap">{r.stderr}</div>
+                      )}
+                      {!r.stderr && r.expectedOutput && (
+                        <>
+                          <div className="text-slate-500">Expected:</div>
+                          <div className="text-green-400 mb-2">{r.expectedOutput}</div>
+                          <div className="text-slate-500">Actual:</div>
+                          <div className="text-red-400">{r.actualOutput || "No output"}</div>
+                        </>
+                      )}
+                    </div>
+                  )).slice(0, 1)}
                 </div>
               )}
               {submitState === "error" && (
                 <div className="flex items-center gap-2 text-slate-400 text-xs">
                   <AlertCircle className="w-3.5 h-3.5" />
-                  Execution error. Check your JUDGE0_API_KEY in .env
+                  Execution error. Please try again.
                 </div>
               )}
             </div>

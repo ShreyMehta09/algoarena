@@ -1,45 +1,7 @@
 /**
- * Judge0 CE API wrapper
- * Docs: https://ce.judge0.com/
- * Using RapidAPI host: judge0-ce.p.rapidapi.com
+ * Code Execution API Wrapper (Switched to Piston API for free, keyless, reliable execution)
+ * Docs: https://github.com/engineer-man/piston
  */
-
-const JUDGE0_BASE_URL =
-  process.env.JUDGE0_API_URL || "https://judge0-ce.p.rapidapi.com";
-const JUDGE0_API_KEY = process.env.JUDGE0_API_KEY || "";
-const JUDGE0_HOST = "judge0-ce.p.rapidapi.com";
-
-// Judge0 status codes
-export const JUDGE0_STATUS = {
-  IN_QUEUE: 1,
-  PROCESSING: 2,
-  ACCEPTED: 3,
-  WRONG_ANSWER: 4,
-  TIME_LIMIT_EXCEEDED: 5,
-  COMPILATION_ERROR: 6,
-  RUNTIME_ERROR_SIGSEGV: 7,
-  RUNTIME_ERROR_SIGXFSZ: 8,
-  RUNTIME_ERROR_SIGFPE: 9,
-  RUNTIME_ERROR_SIGABRT: 10,
-  RUNTIME_ERROR_NZEC: 11,
-  RUNTIME_ERROR_OTHER: 12,
-  INTERNAL_ERROR: 13,
-  EXEC_FORMAT_ERROR: 14,
-} as const;
-
-// Map Judge0 language values to language IDs
-export const LANGUAGE_IDS: Record<string, number> = {
-  python: 71,
-  java: 62,
-  cpp: 54,
-  c: 50,
-  javascript: 63,
-  typescript: 74,
-  ruby: 72,
-  rust: 73,
-  csharp: 51,
-  go: 60,
-};
 
 export type JudgeVerdict =
   | "ACCEPTED"
@@ -70,87 +32,83 @@ export interface SubmissionResult {
   message: string;
 }
 
-function b64(str: string): string {
-  return Buffer.from(str).toString("base64");
-}
-
-function fromB64(str: string | null): string {
-  if (!str) return "";
-  return Buffer.from(str, "base64").toString("utf8");
-}
-
-function mapStatus(statusId: number): JudgeVerdict {
-  if (statusId === JUDGE0_STATUS.ACCEPTED) return "ACCEPTED";
-  if (statusId === JUDGE0_STATUS.WRONG_ANSWER) return "WRONG_ANSWER";
-  if (statusId === JUDGE0_STATUS.TIME_LIMIT_EXCEEDED) return "TIME_LIMIT_EXCEEDED";
-  if (statusId === JUDGE0_STATUS.COMPILATION_ERROR) return "COMPILATION_ERROR";
-  if (
-    statusId >= JUDGE0_STATUS.RUNTIME_ERROR_SIGSEGV &&
-    statusId <= JUDGE0_STATUS.RUNTIME_ERROR_OTHER
-  )
-    return "RUNTIME_ERROR";
-  return "INTERNAL_ERROR";
-}
+// Map frontend languages to Piston API runtimes
+const PISTON_RUNTIMES: Record<string, { language: string; version: string }> = {
+  python: { language: "python", version: "3.10.0" },
+  java: { language: "java", version: "15.0.2" },
+  cpp: { language: "c++", version: "10.2.0" },
+  c: { language: "c", version: "10.2.0" },
+  javascript: { language: "javascript", version: "18.15.0" },
+  typescript: { language: "typescript", version: "5.0.3" },
+  ruby: { language: "ruby", version: "3.0.1" },
+  rust: { language: "rust", version: "1.68.2" },
+  csharp: { language: "csharp", version: "6.12.0" },
+  go: { language: "go", version: "1.16.2" },
+};
 
 /**
- * Submit a single test case to Judge0 and wait for result
+ * Submit a single test case to Piston API
  */
 async function submitSingle(
   code: string,
-  languageId: number,
+  language: string,
+  version: string,
   stdin: string,
-  expectedOutput: string,
-  timeLimit: number = 2,
-  memoryLimit: number = 262144
+  timeLimit: number = 2
 ): Promise<{
-  statusId: number;
-  runtime: number | null;
-  memory: number | null;
+  verdict: JudgeVerdict;
   stdout: string | null;
   stderr: string | null;
-  compileOutput: string | null;
 }> {
-  if (!JUDGE0_API_KEY) {
-    throw new Error("JUDGE0_API_KEY is not configured");
-  }
-
   const body = {
-    source_code: b64(code),
-    language_id: languageId,
-    stdin: b64(stdin),
-    expected_output: b64(expectedOutput),
-    cpu_time_limit: timeLimit,
-    memory_limit: memoryLimit,
-    base64_encoded: true,
+    language,
+    version,
+    files: [{ content: code }],
+    stdin,
+    compile_timeout: 10000,
+    run_timeout: Math.max(timeLimit * 1000, 3000), // ms
   };
 
-  const submitRes = await fetch(
-    `${JUDGE0_BASE_URL}/submissions?base64_encoded=true&wait=true`,
-    {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-RapidAPI-Key": JUDGE0_API_KEY,
-        "X-RapidAPI-Host": JUDGE0_HOST,
-      },
-      body: JSON.stringify(body),
-    }
-  );
+  const submitRes = await fetch("https://emkc.org/api/v2/piston/execute", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
 
   if (!submitRes.ok) {
-    const text = await submitRes.text();
-    throw new Error(`Judge0 submission failed: ${submitRes.status} ${text}`);
+    throw new Error(`Piston API failed: ${submitRes.status}`);
   }
 
   const result = await submitRes.json();
 
+  if (result.compile && result.compile.code !== 0) {
+    return {
+      verdict: "COMPILATION_ERROR",
+      stdout: null,
+      stderr: result.compile.output,
+    };
+  }
+
+  if (result.run.code !== 0) {
+    // If it hit timeout or killed
+    if (result.run.signal === "SIGKILL" || result.run.signal === "SIGTERM") {
+      return {
+        verdict: "TIME_LIMIT_EXCEEDED",
+        stdout: result.run.stdout,
+        stderr: result.run.stderr,
+      };
+    }
+    return {
+      verdict: "RUNTIME_ERROR",
+      stdout: result.run.stdout,
+      stderr: result.run.stderr || result.run.output,
+    };
+  }
+
   return {
-    statusId: result.status?.id ?? JUDGE0_STATUS.INTERNAL_ERROR,
-    runtime: result.time ? Math.round(parseFloat(result.time) * 1000) : null,
-    memory: result.memory ?? null,
-    stdout: result.stdout ? fromB64(result.stdout) : null,
-    stderr: result.stderr ? fromB64(result.stderr) : null,
-    compileOutput: result.compile_output ? fromB64(result.compile_output) : null,
+    verdict: "ACCEPTED",
+    stdout: result.run.stdout,
+    stderr: result.run.stderr,
   };
 }
 
@@ -162,10 +120,10 @@ export async function judgeSubmission(
   language: string,
   testCases: Array<{ input: string; expectedOutput: string }>,
   timeLimit: number = 2,
-  memoryLimit: number = 262144
+  memoryLimit: number = 262144 // unused by piston currently
 ): Promise<SubmissionResult> {
-  const languageId = LANGUAGE_IDS[language];
-  if (!languageId) {
+  const runtime = PISTON_RUNTIMES[language];
+  if (!runtime) {
     return {
       verdict: "INTERNAL_ERROR",
       testsPassed: 0,
@@ -177,21 +135,7 @@ export async function judgeSubmission(
     };
   }
 
-  if (!JUDGE0_API_KEY) {
-    return {
-      verdict: "INTERNAL_ERROR",
-      testsPassed: 0,
-      totalTests: testCases.length,
-      runtime: null,
-      memory: null,
-      results: [],
-      message: "Code execution is not configured. Add JUDGE0_API_KEY to .env",
-    };
-  }
-
   const results: TestCaseResult[] = [];
-  let totalRuntime = 0;
-  let maxMemory = 0;
   let firstFailVerdict: JudgeVerdict = "ACCEPTED";
   let allPassed = true;
 
@@ -199,14 +143,23 @@ export async function judgeSubmission(
     try {
       const raw = await submitSingle(
         code,
-        languageId,
+        runtime.language,
+        runtime.version,
         tc.input,
-        tc.expectedOutput,
-        timeLimit,
-        memoryLimit
+        timeLimit
       );
 
-      const verdict = mapStatus(raw.statusId);
+      // Verify output if execution succeeded
+      let verdict = raw.verdict;
+      const actualOutput = raw.stdout?.trim() ?? "";
+      const expectedOutput = tc.expectedOutput.trim();
+
+      if (verdict === "ACCEPTED") {
+        if (actualOutput !== expectedOutput) {
+          verdict = "WRONG_ANSWER";
+        }
+      }
+
       const passed = verdict === "ACCEPTED";
 
       if (!passed && allPassed) {
@@ -214,21 +167,18 @@ export async function judgeSubmission(
         firstFailVerdict = verdict;
       }
 
-      if (raw.runtime) totalRuntime += raw.runtime;
-      if (raw.memory && raw.memory > maxMemory) maxMemory = raw.memory;
-
       results.push({
         passed,
         verdict,
-        runtime: raw.runtime,
-        memory: raw.memory,
+        runtime: null, // Piston does not provide precise per-test runtime metrics
+        memory: null,
         stdout: raw.stdout,
-        stderr: raw.stderr ?? raw.compileOutput,
+        stderr: raw.stderr,
         expectedOutput: tc.expectedOutput,
         actualOutput: raw.stdout?.trim() ?? null,
       });
 
-      // Stop early on compilation error (affects all test cases)
+      // Stop early on compilation error
       if (verdict === "COMPILATION_ERROR") {
         for (let i = results.length; i < testCases.length; i++) {
           results.push({
@@ -237,7 +187,7 @@ export async function judgeSubmission(
             runtime: null,
             memory: null,
             stdout: null,
-            stderr: raw.compileOutput ?? raw.stderr,
+            stderr: raw.stderr,
             expectedOutput: testCases[i].expectedOutput,
             actualOutput: null,
           });
@@ -268,8 +218,8 @@ export async function judgeSubmission(
     verdict: finalVerdict,
     testsPassed,
     totalTests: testCases.length,
-    runtime: totalRuntime > 0 ? Math.round(totalRuntime / results.length) : null,
-    memory: maxMemory > 0 ? maxMemory : null,
+    runtime: null,
+    memory: null,
     results,
     message:
       finalVerdict === "ACCEPTED"

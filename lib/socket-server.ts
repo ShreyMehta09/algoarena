@@ -148,6 +148,12 @@ async function createBattleAndNotify(
 
     if (problems.length === 0) {
       console.error("[Matchmaking] No problems found for difficulty:", difficulty);
+      const sockets = await ns.fetchSockets();
+      for (const s of sockets) {
+        if (s.data.userId === player1.userId || s.data.userId === player2.userId) {
+          s.emit("queue:error", { message: "No problems available in the database for this difficulty." });
+        }
+      }
       return;
     }
 
@@ -282,60 +288,40 @@ function setupBattleNamespace() {
           const battle = await Battle.findById(battleId);
           if (!battle || battle.status !== "ACTIVE") return;
 
-          const [winner, loser] = await Promise.all([
-            User.findOne({ clerkId: userId }),
-            User.findOne({
-              clerkId: battle.player1Id === userId ? battle.player2Id : battle.player1Id,
-            }),
-          ]);
-
-          if (!winner || !loser) return;
-
-          const { newWinnerRating, newLoserRating, winnerDelta, loserDelta } =
-            applyEloChange(winner.rating, loser.rating);
-
-          // Update DB
-          await Promise.all([
-            Battle.findByIdAndUpdate(battleId, {
-              status: "FINISHED",
-              winnerId: userId,
-              endedAt: new Date(),
-            }),
-            User.findByIdAndUpdate(winner._id, {
-              rating: newWinnerRating,
-              $inc: { wins: 1 },
-            }),
-            User.findByIdAndUpdate(loser._id, {
-              rating: newLoserRating,
-              $inc: { losses: 1 },
-            }),
-            Submission.create({
-              userId,
-              problemId: battle.problemId,
-              battleId: battle._id,
-              code: "",
-              language: "unknown",
-              status: "ACCEPTED",
-              runtime: data.runtime,
-              memory: data.memory,
-              score: winnerDelta,
-            }),
-          ]);
-
-          // Stop timer
-          stopBattleTimer(battleId);
-
-          // Broadcast winner to everyone in room
-          ns.to(battleId).emit("battle:winner", {
-            winnerId: userId,
-            winnerUsername: socket.data.username,
-            eloChanges: {
-              [winner.clerkId]: { delta: winnerDelta, newRating: newWinnerRating },
-              [loser.clerkId]: { delta: loserDelta, newRating: newLoserRating },
-            },
+          // Record their submission
+          await Submission.create({
+            userId,
+            problemId: battle.problemId,
+            battleId: battle._id,
+            code: "", // Idealy we'd have the code here
+            language: "unknown",
+            status: "ACCEPTED",
+            runtime: data.runtime,
+            memory: data.memory,
+            score: 0, // will be updated when battle resolves
           });
+
+          if (!battle.winnerId) {
+            // First person to finish!
+            battle.winnerId = userId;
+            await battle.save();
+            
+            // Notify clients that someone finished
+            ns.to(battleId).emit("battle:first_finish", { 
+               winnerId: userId,
+               message: `${socket.data.username} has solved the problem!`
+            });
+            // Also notify the user of their own success
+            socket.emit("submit:result", { verdict, testsPassed: data.testsPassed, totalTests: data.totalTests });
+          } else if (battle.winnerId !== userId) {
+            // Second person finished! End the battle.
+            await resolveBattlePoints(battleId, battle.winnerId, ns);
+          } else {
+            // The first winner submitted again. Just acknowledge it to them.
+            socket.emit("submit:result", { verdict, testsPassed: data.testsPassed, totalTests: data.totalTests });
+          }
         } catch (err) {
-          console.error("[Battle] Error resolving winner:", err);
+          console.error("[Battle] Error handling submit:", err);
         }
       }
     );
@@ -346,8 +332,60 @@ function setupBattleNamespace() {
 
       socket.to(battleId).emit("battle:opponent_left", { username });
       console.log(`[Battle] ${username} disconnected from battle ${battleId}`);
+      
+      // If a player disconnects, we could auto-resolve if the other already finished, 
+      // but timeout will handle it anyway.
     });
   });
+}
+
+async function resolveBattlePoints(battleId: string, winnerId: string, ns: ReturnType<SocketIOServer["of"]>) {
+  try {
+    const battle = await Battle.findById(battleId);
+    if (!battle || battle.status === "FINISHED") return;
+
+    const loserId = battle.player1Id === winnerId ? battle.player2Id : battle.player1Id;
+
+    const [winner, loser] = await Promise.all([
+      User.findOne({ clerkId: winnerId }),
+      User.findOne({ clerkId: loserId }),
+    ]);
+
+    if (!winner || !loser) return;
+
+    const { newWinnerRating, newLoserRating, winnerDelta, loserDelta } = applyEloChange(winner.rating, loser.rating);
+
+    // Update DB
+    await Promise.all([
+      Battle.findByIdAndUpdate(battleId, {
+        status: "FINISHED",
+        endedAt: new Date(),
+      }),
+      User.findByIdAndUpdate(winner._id, {
+        rating: newWinnerRating,
+        $inc: { wins: 1 },
+      }),
+      User.findByIdAndUpdate(loser._id, {
+        rating: newLoserRating,
+        $inc: { losses: 1 },
+      }),
+      Submission.findOneAndUpdate({ battleId, userId: winnerId }, { score: winnerDelta }),
+      Submission.findOneAndUpdate({ battleId, userId: loserId }, { score: loserDelta }),
+    ]);
+
+    stopBattleTimer(battleId);
+
+    ns.to(battleId).emit("battle:winner", {
+      winnerId,
+      winnerUsername: winner.username,
+      eloChanges: {
+        [winner.clerkId]: { delta: winnerDelta, newRating: newWinnerRating },
+        [loser.clerkId]: { delta: loserDelta, newRating: newLoserRating },
+      },
+    });
+  } catch (err) {
+    console.error("[Battle] Error resolving points:", err);
+  }
 }
 
 function startBattleTimer(battleId: string, ns: ReturnType<SocketIOServer["of"]>) {
@@ -364,14 +402,24 @@ function startBattleTimer(battleId: string, ns: ReturnType<SocketIOServer["of"]>
 
     if (timeLeft <= 0) {
       stopBattleTimer(battleId);
-      ns.to(battleId).emit("battle:timeout", { message: "Time is up! Battle ended in a draw." });
-
-      // Mark battle as finished with no winner
-      await dbConnect;
-      await Battle.findByIdAndUpdate(battleId, {
-        status: "FINISHED",
-        endedAt: new Date(),
-      }).catch(() => {});
+      
+      // If time is up, resolve based on if someone finished already
+      dbConnect.then(async () => {
+        const battle = await Battle.findById(battleId);
+        if (battle && battle.status === "ACTIVE") {
+          if (battle.winnerId) {
+            // One person finished, the other ran out of time
+            await resolveBattlePoints(battleId, battle.winnerId, ns);
+          } else {
+            // Draw
+            ns.to(battleId).emit("battle:timeout", { message: "Time is up! Battle ended in a draw." });
+            await Battle.findByIdAndUpdate(battleId, {
+              status: "FINISHED",
+              endedAt: new Date(),
+            }).catch(() => {});
+          }
+        }
+      }).catch(console.error);
     }
   }, 1000);
 

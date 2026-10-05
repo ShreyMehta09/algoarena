@@ -5,12 +5,12 @@ declare global {
   var __mongooseConn: Promise<typeof mongoose> | undefined;
 }
 
-const MONGODB_URI = process.env.MONGODB_URI;
-if (!MONGODB_URI) {
-  throw new Error("MONGODB_URI environment variable is not set");
-}
-
 async function connectDB(): Promise<typeof mongoose> {
+  const MONGODB_URI = process.env.MONGODB_URI;
+  if (!MONGODB_URI) {
+    throw new Error("MONGODB_URI environment variable is not set");
+  }
+
   if (mongoose.connection.readyState >= 1) {
     return mongoose;
   }
@@ -23,11 +23,14 @@ async function connectDB(): Promise<typeof mongoose> {
   return mongoose.connect(MONGODB_URI as string, opts);
 }
 
-// Singleton: reuse existing connection promise in dev (hot-reload)
-const dbConnect = globalThis.__mongooseConn ?? connectDB();
-
-if (process.env.NODE_ENV !== "production") {
-  globalThis.__mongooseConn = dbConnect;
-}
+// Lazy connection: only initialize when `await dbConnect` is called.
+const dbConnect = {
+  then(resolve: any, reject: any) {
+    if (!globalThis.__mongooseConn) {
+      globalThis.__mongooseConn = connectDB();
+    }
+    return globalThis.__mongooseConn.then(resolve, reject);
+  }
+};
 
 export default dbConnect;

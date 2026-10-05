@@ -12,7 +12,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { code, language, problemId, battleId } = body;
+    const { code, language, problemId, battleId, isRun } = body;
 
     if (!code || !language || !problemId) {
       return NextResponse.json(
@@ -30,7 +30,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Problem not found" }, { status: 404 });
     }
 
-    const testCases = problem.testCases ?? [];
+    const allTestCases = problem.testCases ?? [];
+    const testCases = isRun ? allTestCases.filter(tc => !tc.isHidden) : allTestCases;
 
     if (testCases.length === 0) {
       return NextResponse.json({ error: "No test cases available" }, { status: 500 });
@@ -45,18 +46,20 @@ export async function POST(request: NextRequest) {
       problem.memoryLimit * 1024 // convert MB → KB for Judge0
     );
 
-    // Store submission record
-    await Submission.create({
-      userId,
-      problemId: problem._id,
-      battleId: battleId ?? null,
-      code,
-      language,
-      status: result.verdict,
-      runtime: result.runtime,
-      memory: result.memory,
-      score: 0, // Battle socket handler sets actual Elo delta
-    });
+    // Store submission record only if it's a real submission
+    if (!isRun) {
+      await Submission.create({
+        userId,
+        problemId: problem._id,
+        battleId: battleId ?? null,
+        code,
+        language,
+        status: result.verdict,
+        runtime: result.runtime,
+        memory: result.memory,
+        score: 0, // Battle socket handler sets actual Elo delta
+      });
+    }
 
     return NextResponse.json({
       verdict: result.verdict,
@@ -69,7 +72,10 @@ export async function POST(request: NextRequest) {
         passed: r.passed,
         verdict: r.verdict,
         runtime: r.runtime,
-        // Don't expose exact test inputs/expected outputs to client
+        stdout: isRun ? r.stdout : null,
+        stderr: isRun || r.verdict === "COMPILATION_ERROR" ? r.stderr : null,
+        actualOutput: isRun ? r.actualOutput : null,
+        expectedOutput: isRun ? r.expectedOutput : null,
       })),
     });
   } catch (err) {
