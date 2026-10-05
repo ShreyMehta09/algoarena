@@ -5,10 +5,7 @@ declare global {
   var __mongooseConn: Promise<typeof mongoose> | undefined;
 }
 
-const MONGODB_URI =
-  process.env.MONGODB_URI ||
-  "mongodb+srv://shreymehta2023_db_user:dQg3cF62gYSyMkif@cluster0.g0jbq3l.mongodb.net";
-
+const MONGODB_URI = process.env.MONGODB_URI;
 if (!MONGODB_URI) {
   throw new Error("MONGODB_URI environment variable is not set");
 }
@@ -23,7 +20,7 @@ async function connectDB(): Promise<typeof mongoose> {
     bufferCommands: false,
   };
 
-  return mongoose.connect(MONGODB_URI, opts);
+  return mongoose.connect(MONGODB_URI as string, opts);
 }
 
 // Singleton: reuse existing connection promise in dev (hot-reload)
