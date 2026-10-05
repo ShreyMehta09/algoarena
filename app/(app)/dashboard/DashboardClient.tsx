@@ -12,17 +12,17 @@ import {
   ChevronRight,
 } from "lucide-react";
 import Link from "next/link";
-import {
-  LineChart,
-  Line,
-  XAxis,
-  YAxis,
-  Tooltip,
-  ResponsiveContainer,
-  PieChart,
-  Pie,
-  Cell,
-} from "recharts";
+import dynamic from 'next/dynamic';
+
+const LineChart = dynamic(() => import('recharts').then(mod => mod.LineChart), { ssr: false });
+const Line = dynamic(() => import('recharts').then(mod => mod.Line), { ssr: false });
+const XAxis = dynamic(() => import('recharts').then(mod => mod.XAxis), { ssr: false });
+const YAxis = dynamic(() => import('recharts').then(mod => mod.YAxis), { ssr: false });
+const Tooltip = dynamic(() => import('recharts').then(mod => mod.Tooltip), { ssr: false });
+const ResponsiveContainer = dynamic(() => import('recharts').then(mod => mod.ResponsiveContainer), { ssr: false });
+const PieChart = dynamic(() => import('recharts').then(mod => mod.PieChart), { ssr: false });
+const Pie = dynamic(() => import('recharts').then(mod => mod.Pie), { ssr: false });
+const Cell = dynamic(() => import('recharts').then(mod => mod.Cell), { ssr: false });
 import {
   getRankFromRating,
   calculateWinRate,
@@ -252,16 +252,16 @@ export default function DashboardClient({ user, recentBattles, difficultyBreakdo
               <div className="relative w-32 h-32">
                 <PieChart width={128} height={128}>
                   <Pie
-                    data={difficultyBreakdown}
+                    data={totalSolved > 0 ? difficultyBreakdown : [{ name: "None", solved: 1, color: "#1e293b" }]}
                     cx={60}
                     cy={60}
                     innerRadius={40}
                     outerRadius={58}
-                    paddingAngle={3}
+                    paddingAngle={totalSolved > 0 ? 3 : 0}
                     dataKey="solved"
                     stroke="none"
                   >
-                    {difficultyBreakdown.map((entry: any, index: number) => (
+                    {(totalSolved > 0 ? difficultyBreakdown : [{ name: "None", solved: 1, color: "#1e293b" }]).map((entry: any, index: number) => (
                       <Cell key={index} fill={entry.color} opacity={0.8} />
                     ))}
                   </Pie>

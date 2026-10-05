@@ -25,7 +25,11 @@ export default async function ProblemDetailPage({
     description: problem.description,
     difficulty: problem.difficulty,
     tags: problem.tags,
-    examples: problem.examples,
+    examples: problem.examples.map((ex: any) => ({
+      input: ex.input,
+      output: ex.output,
+      explanation: ex.explanation,
+    })),
     constraints: problem.constraints.split("\n"),
     timeLimit: problem.timeLimit,
     memoryLimit: problem.memoryLimit,
