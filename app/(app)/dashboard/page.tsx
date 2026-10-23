@@ -1,6 +1,5 @@
 import { auth } from "@clerk/nextjs/server";
 import { redirect } from "next/navigation";
-import { MOCK_RATING_HISTORY } from "@/lib/mock-data";
 import dbConnect from "@/lib/mongodb";
 import { User, Battle, Problem, Submission } from "@/lib/models";
 import { getOrSyncUser } from "@/lib/sync-user";
@@ -18,11 +17,10 @@ export default async function DashboardPage() {
   const user = await getOrSyncUser(userId);
 
   if (!user) {
-    // User could not be created/synced
     redirect("/sign-in");
   }
 
-  // Get recent battles
+  // ── Recent Battles ───────────────────────────────────────────────
   const recentBattlesRaw = await Battle.find({
     $or: [{ player1Id: userId }, { player2Id: userId }],
     status: "FINISHED",
@@ -70,19 +68,18 @@ export default async function DashboardPage() {
       },
       result,
       duration,
-      ratingChange: result === "WIN" ? 15 : -15,
-      date: b.endedAt || b.createdAt,
+      ratingChange: result === "WIN" ? 15 : result === "LOSS" ? -15 : 0,
+      date: (b.endedAt || b.createdAt)?.toISOString?.() || new Date().toISOString(),
     };
   });
 
-  // Calculate difficulty breakdown
+  // ── Difficulty Breakdown ─────────────────────────────────────────
   const [totalEasy, totalMedium, totalHard] = await Promise.all([
     Problem.countDocuments({ difficulty: "EASY" }),
     Problem.countDocuments({ difficulty: "MEDIUM" }),
     Problem.countDocuments({ difficulty: "HARD" }),
   ]);
 
-  // Solved problems by difficulty
   const solvedAgg = await Submission.aggregate([
     { $match: { userId, status: "ACCEPTED" } },
     { $group: { _id: "$problemId" } },
@@ -106,6 +103,64 @@ export default async function DashboardPage() {
     { name: "Hard", solved: solvedMap.get("HARD") ?? 0, total: totalHard || 1, color: "#f87171" },
   ];
 
+  // ── Real Rating History ──────────────────────────────────────────
+  // Build rating history from finished battles, chronologically
+  const allBattles = await Battle.find({
+    $or: [{ player1Id: userId }, { player2Id: userId }],
+    status: "FINISHED",
+  })
+    .sort({ endedAt: 1 })
+    .select("winnerId endedAt")
+    .lean();
+
+  // Simulate rating progression from battles
+  const ratingHistory: { date: string; rating: number }[] = [];
+  let runningRating = 1200; // Starting Elo
+
+  // Add starting point
+  const createdDate = user.createdAt || new Date();
+  ratingHistory.push({
+    date: new Date(createdDate).toLocaleDateString("en-US", { month: "short", day: "numeric" }),
+    rating: runningRating,
+  });
+
+  for (const battle of allBattles) {
+    const isWin = battle.winnerId === userId;
+    const isDraw = !battle.winnerId;
+    if (isWin) {
+      runningRating += 15;
+    } else if (!isDraw) {
+      runningRating -= 15;
+    }
+    const dateLabel = battle.endedAt
+      ? new Date(battle.endedAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })
+      : "Unknown";
+    ratingHistory.push({ date: dateLabel, rating: runningRating });
+  }
+
+  // If no battles yet, show user's current rating as a flat line
+  if (allBattles.length === 0) {
+    ratingHistory.push({
+      date: "Now",
+      rating: user.rating,
+    });
+  }
+
+  // Calculate current win streak
+  let streak = 0;
+  for (let i = recentBattlesRaw.length - 1; i >= 0; i--) {
+    // Go from most recent battle backwards
+  }
+  // Actually iterate from the most recent
+  const sortedBattles = [...recentBattlesRaw]; // already sorted by endedAt desc
+  for (const b of sortedBattles) {
+    if (b.winnerId === userId) {
+      streak++;
+    } else {
+      break;
+    }
+  }
+
   return (
     <DashboardClient
       user={{
@@ -117,7 +172,8 @@ export default async function DashboardPage() {
       }}
       recentBattles={recentBattles}
       difficultyBreakdown={difficultyBreakdown}
-      ratingHistory={MOCK_RATING_HISTORY}
+      ratingHistory={ratingHistory}
+      currentStreak={streak}
     />
   );
 }

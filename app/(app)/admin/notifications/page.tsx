@@ -1,8 +1,10 @@
 import dbConnect from "@/lib/mongodb";
 import { Notification } from "@/lib/models";
 import { revalidatePath } from "next/cache";
-import { Bell, Send, ArrowLeft } from "lucide-react";
+import { Bell, Send, ArrowLeft, Trash2 } from "lucide-react";
 import Link from "next/link";
+
+export const dynamic = "force-dynamic";
 
 export default async function AdminNotificationsPage() {
   await dbConnect;
@@ -19,7 +21,19 @@ export default async function AdminNotificationsPage() {
     const { Notification } = await import("@/lib/models");
     await Notification.create({ title, message });
     revalidatePath("/admin/notifications");
-    // Also revalidate client layout if we fetch notifications there, but typically it polls or we can revalidate layout
+    revalidatePath("/", "layout");
+  }
+
+  async function deleteNotification(formData: FormData) {
+    "use server";
+    const id = formData.get("id") as string;
+    if (!id) return;
+
+    await dbConnect;
+    const { Notification } = await import("@/lib/models");
+    await Notification.findByIdAndDelete(id);
+    revalidatePath("/admin/notifications");
+    revalidatePath("/", "layout");
   }
 
   return (
@@ -78,10 +92,22 @@ export default async function AdminNotificationsPage() {
               <div className="text-xs text-slate-500 text-center py-4">No recent notifications</div>
             ) : (
               history.map((n: any) => (
-                <div key={n._id.toString()} className="bg-dark-900/50 rounded-lg p-3 border border-white/[0.04]">
+                <div key={n._id.toString()} className="bg-dark-900/50 rounded-lg p-3 border border-white/[0.04] group hover:border-white/[0.08] transition-colors">
                   <div className="flex justify-between items-start mb-1">
                     <div className="text-sm font-bold text-slate-200">{n.title}</div>
-                    <div className="text-[10px] text-slate-500">{new Date(n.createdAt).toLocaleDateString()}</div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-[10px] text-slate-500">{new Date(n.createdAt).toLocaleDateString()}</span>
+                      <form action={deleteNotification}>
+                        <input type="hidden" name="id" value={n._id.toString()} />
+                        <button
+                          type="submit"
+                          className="opacity-0 group-hover:opacity-100 text-slate-500 hover:text-red-400 p-1 transition-all"
+                          title="Delete notification"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </form>
+                    </div>
                   </div>
                   <div className="text-xs text-slate-400">{n.message}</div>
                 </div>

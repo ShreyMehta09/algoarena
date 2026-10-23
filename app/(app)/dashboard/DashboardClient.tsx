@@ -1,5 +1,6 @@
 "use client";
 
+import { useState, useEffect } from "react";
 import {
   TrendingUp,
   TrendingDown,
@@ -12,17 +13,6 @@ import {
   ChevronRight,
 } from "lucide-react";
 import Link from "next/link";
-import dynamic from 'next/dynamic';
-
-const LineChart = dynamic(() => import('recharts').then(mod => mod.LineChart), { ssr: false });
-const Line = dynamic(() => import('recharts').then(mod => mod.Line), { ssr: false });
-const XAxis = dynamic(() => import('recharts').then(mod => mod.XAxis), { ssr: false });
-const YAxis = dynamic(() => import('recharts').then(mod => mod.YAxis), { ssr: false });
-const Tooltip = dynamic(() => import('recharts').then(mod => mod.Tooltip), { ssr: false });
-const ResponsiveContainer = dynamic(() => import('recharts').then(mod => mod.ResponsiveContainer), { ssr: false });
-const PieChart = dynamic(() => import('recharts').then(mod => mod.PieChart), { ssr: false });
-const Pie = dynamic(() => import('recharts').then(mod => mod.Pie), { ssr: false });
-const Cell = dynamic(() => import('recharts').then(mod => mod.Cell), { ssr: false });
 import {
   getRankFromRating,
   calculateWinRate,
@@ -31,6 +21,104 @@ import {
   cn,
 } from "@/lib/utils";
 import { DifficultyBadge } from "@/components/ui/badge";
+
+// Lazy-load Recharts to avoid SSR hydration mismatches
+function RatingChart({ data }: { data: any[] }) {
+  const [Chart, setChart] = useState<any>(null);
+
+  useEffect(() => {
+    import("recharts").then((mod) => setChart(mod));
+  }, []);
+
+  if (!Chart) {
+    return (
+      <div className="h-[120px] flex items-center justify-center text-slate-600 text-xs">
+        Loading chart...
+      </div>
+    );
+  }
+
+  const { ResponsiveContainer, LineChart, Line, XAxis, YAxis, Tooltip } = Chart;
+
+  return (
+    <ResponsiveContainer width="100%" height={120}>
+      <LineChart data={data}>
+        <XAxis
+          dataKey="date"
+          tick={{ fontSize: 10, fill: "#64748b" }}
+          axisLine={false}
+          tickLine={false}
+        />
+        <YAxis domain={["dataMin - 50", "dataMax + 50"]} hide />
+        <Tooltip
+          content={({ active, payload, label }: any) => {
+            if (active && payload && payload.length) {
+              return (
+                <div className="glass rounded-lg px-3 py-2 border border-white/[0.06] text-xs">
+                  <p className="text-slate-400">{label}</p>
+                  <p className="text-brand-cyan font-bold">{payload[0].value} Elo</p>
+                </div>
+              );
+            }
+            return null;
+          }}
+        />
+        <Line
+          type="monotone"
+          dataKey="rating"
+          stroke="#00D4FF"
+          strokeWidth={2}
+          dot={{ fill: "#00D4FF", r: 3, strokeWidth: 0 }}
+          activeDot={{ r: 5, fill: "#00D4FF" }}
+        />
+      </LineChart>
+    </ResponsiveContainer>
+  );
+}
+
+function ProblemPieChart({ data, totalSolved }: { data: any[]; totalSolved: number }) {
+  const [Chart, setChart] = useState<any>(null);
+
+  useEffect(() => {
+    import("recharts").then((mod) => setChart(mod));
+  }, []);
+
+  if (!Chart) {
+    return (
+      <div className="w-32 h-32 flex items-center justify-center">
+        <div className="text-xl font-black text-white">{totalSolved}</div>
+      </div>
+    );
+  }
+
+  const { PieChart, Pie, Cell } = Chart;
+  const chartData = totalSolved > 0 ? data : [{ name: "None", solved: 1, color: "#1e293b" }];
+
+  return (
+    <div className="relative w-32 h-32">
+      <PieChart width={128} height={128}>
+        <Pie
+          data={chartData}
+          cx={60}
+          cy={60}
+          innerRadius={40}
+          outerRadius={58}
+          paddingAngle={totalSolved > 0 ? 3 : 0}
+          dataKey="solved"
+          stroke="none"
+        >
+          {chartData.map((entry: any, index: number) => (
+            <Cell key={index} fill={entry.color} opacity={0.8} />
+          ))}
+        </Pie>
+      </PieChart>
+      <div className="absolute inset-0 flex items-center justify-center flex-col">
+        <span className="text-xl font-black text-white">{totalSolved}</span>
+        <span className="text-xs text-slate-500">solved</span>
+      </div>
+    </div>
+  );
+}
 
 function StatCard({
   label,
@@ -70,22 +158,27 @@ function StatCard({
   );
 }
 
-const CustomTooltip = ({ active, payload, label }: any) => {
-  if (active && payload && payload.length) {
-    return (
-      <div className="glass rounded-lg px-3 py-2 border border-white/[0.06] text-xs">
-        <p className="text-slate-400">{label}</p>
-        <p className="text-brand-cyan font-bold">{payload[0].value} Elo</p>
-      </div>
-    );
-  }
-  return null;
+interface DashboardClientProps {
+  user: any;
+  recentBattles: any[];
+  difficultyBreakdown: any[];
+  ratingHistory: any[];
+  currentStreak?: number;
 }
 
-export default function DashboardClient({ user, recentBattles, difficultyBreakdown, ratingHistory }: any) {
+export default function DashboardClient({
+  user,
+  recentBattles,
+  difficultyBreakdown,
+  ratingHistory,
+  currentStreak = 0,
+}: DashboardClientProps) {
   const rank = getRankFromRating(user.rating);
   const winRate = calculateWinRate(user.wins, user.losses);
-  const totalSolved = difficultyBreakdown.reduce((acc: number, curr: any) => acc + curr.solved, 0);
+  const totalSolved = difficultyBreakdown.reduce(
+    (acc: number, curr: any) => acc + curr.solved,
+    0
+  );
 
   return (
     <div className="space-y-8 page-transition">
@@ -94,7 +187,9 @@ export default function DashboardClient({ user, recentBattles, difficultyBreakdo
         <div>
           <h1 className="text-2xl font-black text-white">
             Welcome back,{" "}
-            <span className="text-gradient">{(user.name || user.username).split(" ")[0]}</span>
+            <span className="text-gradient">
+              {(user.name || user.username).split(" ")[0]}
+            </span>
           </h1>
           <p className="text-slate-500 text-sm mt-1">
             Your competitive coding dashboard
@@ -116,7 +211,12 @@ export default function DashboardClient({ user, recentBattles, difficultyBreakdo
           <div>
             {rank.rank !== "Unranked" && (
               <div className="flex items-center gap-2 mb-1">
-                <span className={cn("text-xs font-bold uppercase tracking-wider", rank.class)}>
+                <span
+                  className={cn(
+                    "text-xs font-bold uppercase tracking-wider",
+                    rank.class
+                  )}
+                >
                   {rank.rank}
                 </span>
                 <span className="text-slate-600 text-xs">Rank</span>
@@ -134,23 +234,9 @@ export default function DashboardClient({ user, recentBattles, difficultyBreakdo
           </div>
           <div>
             <div className="text-xs text-slate-500 mb-3 font-medium uppercase tracking-wider">
-              Rating History (2026)
+              Rating History
             </div>
-            <ResponsiveContainer width="100%" height={120}>
-              <LineChart data={ratingHistory}>
-                <XAxis dataKey="date" tick={{ fontSize: 10, fill: "#64748b" }} axisLine={false} tickLine={false} />
-                <YAxis domain={["dataMin - 100", "dataMax + 100"]} hide />
-                <Tooltip content={<CustomTooltip />} />
-                <Line
-                  type="monotone"
-                  dataKey="rating"
-                  stroke="#00D4FF"
-                  strokeWidth={2}
-                  dot={{ fill: "#00D4FF", r: 3, strokeWidth: 0 }}
-                  activeDot={{ r: 5, fill: "#00D4FF" }}
-                />
-              </LineChart>
-            </ResponsiveContainer>
+            <RatingChart data={ratingHistory} />
           </div>
         </div>
       </div>
@@ -180,7 +266,7 @@ export default function DashboardClient({ user, recentBattles, difficultyBreakdo
         />
         <StatCard
           label="Current Streak"
-          value="W0"
+          value={currentStreak > 0 ? `W${currentStreak}` : "—"}
           sub="Last battles"
           icon={Zap}
           color="yellow"
@@ -193,53 +279,73 @@ export default function DashboardClient({ user, recentBattles, difficultyBreakdo
         <div className="lg:col-span-2 glass rounded-2xl border border-white/[0.06] overflow-hidden">
           <div className="flex items-center justify-between px-6 py-4 border-b border-white/[0.04]">
             <h2 className="font-bold text-slate-200">Recent Battles</h2>
-            <Link href="/battle" className="text-xs text-brand-cyan hover:text-brand-cyan/80 flex items-center gap-1">
+            <Link
+              href="/battle"
+              className="text-xs text-brand-cyan hover:text-brand-cyan/80 flex items-center gap-1"
+            >
               View all <ChevronRight className="w-3 h-3" />
             </Link>
           </div>
           <div className="divide-y divide-white/[0.04]">
             {recentBattles.length === 0 ? (
-              <div className="p-8 text-center text-slate-500">No battles fought yet. Start one now!</div>
-            ) : recentBattles.map((battle: any) => (
-              <div key={battle.id} className="flex items-center gap-4 px-6 py-4 hover:bg-white/[0.02] transition-colors">
+              <div className="p-8 text-center text-slate-500">
+                No battles fought yet. Start one now!
+              </div>
+            ) : (
+              recentBattles.map((battle: any) => (
                 <div
-                  className={cn(
-                    "w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 text-xs font-bold",
-                    battle.result === "WIN"
-                      ? "bg-green-400/10 text-green-400 border border-green-400/20"
-                      : "bg-red-400/10 text-red-400 border border-red-400/20"
-                  )}
+                  key={battle.id}
+                  className="flex items-center gap-4 px-6 py-4 hover:bg-white/[0.02] transition-colors"
                 >
-                  {battle.result === "WIN" ? "W" : "L"}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 mb-0.5">
-                    <span className="text-sm font-medium text-slate-200 truncate">
-                      vs {battle.opponent.name}
-                    </span>
-                    <DifficultyBadge difficulty={battle.problem.difficulty} />
-                  </div>
-                  <div className="text-xs text-slate-500 truncate">
-                    {battle.problem.title} · {timeAgo(battle.date)}
-                  </div>
-                </div>
-                <div className="text-right flex-shrink-0">
                   <div
                     className={cn(
-                      "text-sm font-bold",
-                      battle.ratingChange > 0 ? "text-green-400" : "text-red-400"
+                      "w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 text-xs font-bold",
+                      battle.result === "WIN"
+                        ? "bg-green-400/10 text-green-400 border border-green-400/20"
+                        : battle.result === "DRAW"
+                        ? "bg-slate-400/10 text-slate-400 border border-slate-400/20"
+                        : "bg-red-400/10 text-red-400 border border-red-400/20"
                     )}
                   >
-                    {battle.ratingChange > 0 ? "+" : ""}
-                    {battle.ratingChange}
+                    {battle.result === "WIN"
+                      ? "W"
+                      : battle.result === "DRAW"
+                      ? "D"
+                      : "L"}
                   </div>
-                  <div className="flex items-center gap-1 text-xs text-slate-600 mt-0.5">
-                    <Clock className="w-3 h-3" />
-                    {battle.duration}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-0.5">
+                      <span className="text-sm font-medium text-slate-200 truncate">
+                        vs {battle.opponent.name}
+                      </span>
+                      <DifficultyBadge difficulty={battle.problem.difficulty} />
+                    </div>
+                    <div className="text-xs text-slate-500 truncate">
+                      {battle.problem.title} · {timeAgo(battle.date)}
+                    </div>
+                  </div>
+                  <div className="text-right flex-shrink-0">
+                    <div
+                      className={cn(
+                        "text-sm font-bold",
+                        battle.ratingChange > 0
+                          ? "text-green-400"
+                          : battle.ratingChange < 0
+                          ? "text-red-400"
+                          : "text-slate-400"
+                      )}
+                    >
+                      {battle.ratingChange > 0 ? "+" : ""}
+                      {battle.ratingChange}
+                    </div>
+                    <div className="flex items-center gap-1 text-xs text-slate-600 mt-0.5">
+                      <Clock className="w-3 h-3" />
+                      {battle.duration}
+                    </div>
                   </div>
                 </div>
-              </div>
-            ))}
+              ))
+            )}
           </div>
         </div>
 
@@ -249,37 +355,24 @@ export default function DashboardClient({ user, recentBattles, difficultyBreakdo
           <div className="glass rounded-2xl border border-white/[0.06] p-5">
             <h2 className="font-bold text-slate-200 mb-5">Problem Progress</h2>
             <div className="flex items-center justify-center mb-5">
-              <div className="relative w-32 h-32">
-                <PieChart width={128} height={128}>
-                  <Pie
-                    data={totalSolved > 0 ? difficultyBreakdown : [{ name: "None", solved: 1, color: "#1e293b" }]}
-                    cx={60}
-                    cy={60}
-                    innerRadius={40}
-                    outerRadius={58}
-                    paddingAngle={totalSolved > 0 ? 3 : 0}
-                    dataKey="solved"
-                    stroke="none"
-                  >
-                    {(totalSolved > 0 ? difficultyBreakdown : [{ name: "None", solved: 1, color: "#1e293b" }]).map((entry: any, index: number) => (
-                      <Cell key={index} fill={entry.color} opacity={0.8} />
-                    ))}
-                  </Pie>
-                </PieChart>
-                <div className="absolute inset-0 flex items-center justify-center flex-col">
-                  <span className="text-xl font-black text-white">{totalSolved}</span>
-                  <span className="text-xs text-slate-500">solved</span>
-                </div>
-              </div>
+              <ProblemPieChart
+                data={difficultyBreakdown}
+                totalSolved={totalSolved}
+              />
             </div>
             <div className="space-y-3">
               {difficultyBreakdown.map((item: any) => (
                 <div key={item.name} className="flex items-center gap-3">
-                  <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: item.color }} />
+                  <div
+                    className="w-2 h-2 rounded-full flex-shrink-0"
+                    style={{ background: item.color }}
+                  />
                   <div className="flex-1">
                     <div className="flex justify-between text-xs mb-1">
                       <span className="text-slate-400">{item.name}</span>
-                      <span className="text-slate-500">{item.solved}/{item.total}</span>
+                      <span className="text-slate-500">
+                        {item.solved}/{item.total}
+                      </span>
                     </div>
                     <div className="h-1.5 bg-dark-700 rounded-full overflow-hidden">
                       <div
@@ -318,11 +411,11 @@ export default function DashboardClient({ user, recentBattles, difficultyBreakdo
                 <ChevronRight className="w-4 h-4 ml-auto" />
               </Link>
               <Link
-                href="/leaderboard"
+                href="/tournaments"
                 className="flex items-center gap-3 w-full px-4 py-3 rounded-xl btn-ghost text-sm"
               >
                 <Trophy className="w-4 h-4" />
-                View Leaderboard
+                Tournaments
                 <ChevronRight className="w-4 h-4 ml-auto" />
               </Link>
             </div>

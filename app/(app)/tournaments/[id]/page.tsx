@@ -30,17 +30,27 @@ export default async function TournamentDetailsPage(props: { params: Promise<{ i
   // Fetch populated problems if joined and (ongoing or past)
   let problemsData: any[] = [];
   if (hasJoined && status !== "UPCOMING") {
-    // Collect problem IDs
     const problemIds = tournament.problems.map((p: any) => p.problemId);
     const dbProblems = await Problem.find({ _id: { $in: problemIds } }, "title difficulty slug").lean();
     
-    // Merge with maxScore from tournament
-    problemsData = tournament.problems.map((p: any) => {
+    const scores = participant?.problemScores || {};
+    
+    problemsData = tournament.problems.map((p: any, idx: number) => {
       const dbP = dbProblems.find((dp: any) => dp._id.toString() === p.problemId.toString());
+      const probIdStr = p.problemId.toString();
+      const scoreData = scores[probIdStr] || { score: 0, attempts: 0, solved: false };
+      
       return {
-        ...dbP,
+        _id: dbP?._id?.toString() || `unknown-${idx}`,
+        title: dbP?.title || "Unknown Problem",
+        difficulty: dbP?.difficulty || "EASY",
+        slug: dbP?.slug || "unknown",
         maxScore: p.maxScore,
-        scoreData: participant?.problemScores?.[p.problemId.toString()] || { score: 0, attempts: 0, solved: false }
+        scoreData: {
+          score: scoreData.score || 0,
+          attempts: scoreData.attempts || 0,
+          solved: !!scoreData.solved,
+        },
       };
     });
   }

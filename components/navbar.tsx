@@ -13,10 +13,10 @@ import {
   LogOut,
   Menu,
   X,
-  Bell,
   Loader2,
 } from "lucide-react";
 import { cn, getRankFromRating } from "@/lib/utils";
+import NotificationDropdown from "@/components/NotificationDropdown";
 
 const navItems = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
@@ -31,7 +31,7 @@ export default function Navbar() {
   const { user, isLoaded } = useUser();
   const { signOut } = useClerk();
   const [mobileOpen, setMobileOpen] = useState(false);
-  const [userProfile, setUserProfile] = useState<{ rating: number; username: string } | null>(null);
+  const [userProfile, setUserProfile] = useState<{ rating: number; username: string; role: string } | null>(null);
 
   // Fetch extra profile data (rating, username) from MongoDB via API
   useEffect(() => {
@@ -39,7 +39,7 @@ export default function Navbar() {
     fetch("/api/user/me")
       .then((r) => r.json())
       .then((data) => {
-        if (data.user) setUserProfile({ rating: data.user.rating, username: data.user.username });
+        if (data.user) setUserProfile({ rating: data.user.rating, username: data.user.username, role: data.user.role || "USER" });
       })
       .catch(() => {});
   }, [user]);
@@ -89,10 +89,15 @@ export default function Navbar() {
               );
             })}
             
-            {userProfile && (userProfile as any).role === "ADMIN" && (
+            {userProfile && (userProfile.role === "ADMIN" || userProfile.role === "PROBLEM_SETTER") && (
               <Link
                 href="/admin"
-                className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium text-red-400 hover:text-red-300 hover:bg-red-400/10 transition-all duration-200"
+                className={cn(
+                  "flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200",
+                  pathname.startsWith("/admin")
+                    ? "bg-red-400/10 text-red-400 border border-red-400/20"
+                    : "text-red-400 hover:text-red-300 hover:bg-red-400/10"
+                )}
               >
                 Admin
               </Link>
@@ -102,10 +107,7 @@ export default function Navbar() {
           {/* Right Section */}
           <div className="hidden md:flex items-center gap-3">
             {/* Notifications */}
-            <button className="relative w-9 h-9 rounded-lg flex items-center justify-center text-slate-400 hover:text-slate-200 hover:bg-white/5 transition-all">
-              <Bell className="w-4 h-4" />
-              <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-brand-cyan" />
-            </button>
+            <NotificationDropdown userRole={userProfile?.role} />
 
             {/* User chip */}
             {!isLoaded ? (
@@ -145,13 +147,17 @@ export default function Navbar() {
             </button>
           </div>
 
-          {/* Mobile toggle */}
-          <button
-            onClick={() => setMobileOpen(!mobileOpen)}
-            className="md:hidden w-9 h-9 rounded-lg flex items-center justify-center text-slate-400 hover:text-slate-200 hover:bg-white/5 transition-all"
-          >
-            {mobileOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
-          </button>
+          {/* Mobile Right Section: Notifications + Hamburger Toggle */}
+          <div className="flex md:hidden items-center gap-2">
+            <NotificationDropdown userRole={userProfile?.role} />
+            <button
+              onClick={() => setMobileOpen(!mobileOpen)}
+              className="w-9 h-9 rounded-lg flex items-center justify-center text-slate-400 hover:text-slate-200 hover:bg-white/5 transition-all"
+              aria-label="Toggle navigation menu"
+            >
+              {mobileOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+            </button>
+          </div>
         </div>
       </div>
 

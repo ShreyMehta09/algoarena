@@ -14,15 +14,33 @@ export default async function TournamentLeaderboardPage(props: { params: Promise
   // Fetch all participants
   const participants = await TournamentParticipant.find({ tournamentId: id }).lean();
   
-  // Sort participants: highest score first. If tied, the one who reached it earlier wins? We can just sort by score.
-  // Actually, we can add a simple secondary sort by totalPenalty if we had one. For now just totalScore desc.
-  participants.sort((a: any, b: any) => b.totalScore - a.totalScore);
+  // Sort: highest score first, then fewer penalties (attempts) win tiebreakers
+  participants.sort((a: any, b: any) => {
+    if (b.totalScore !== a.totalScore) return b.totalScore - a.totalScore;
+    return (a.totalPenalty || 0) - (b.totalPenalty || 0);
+  });
 
   // Fetch users for these participants
   const userIds = participants.map((p: any) => p.userId);
-  const users = await User.find({ clerkId: { $in: userIds } }, "clerkId username image").lean();
-
+  const users = await User.find({ clerkId: { $in: userIds } }, "clerkId username image rating").lean();
   const userMap = new Map(users.map((u: any) => [u.clerkId, u]));
+
+  // Pre-serialize everything to plain objects
+  const serializedParticipants = participants.map((p: any) => ({
+    id: p._id.toString(),
+    userId: p.userId,
+    totalScore: p.totalScore || 0,
+    totalPenalty: p.totalPenalty || 0,
+  }));
+
+  const serializedUserMap: Record<string, { username: string; image?: string; rating: number }> = {};
+  for (const [key, val] of userMap.entries()) {
+    serializedUserMap[key] = {
+      username: (val as any).username,
+      image: (val as any).image,
+      rating: (val as any).rating,
+    };
+  }
 
   return (
     <div className="min-h-screen py-12 px-4 sm:px-6 lg:px-8">
@@ -46,12 +64,13 @@ export default async function TournamentLeaderboardPage(props: { params: Promise
               <tr>
                 <th className="px-6 py-4 text-xs font-bold text-slate-400 uppercase tracking-wider w-16 text-center">Rank</th>
                 <th className="px-6 py-4 text-xs font-bold text-slate-400 uppercase tracking-wider">Player</th>
+                <th className="px-6 py-4 text-xs font-bold text-slate-400 uppercase tracking-wider text-center">Penalties</th>
                 <th className="px-6 py-4 text-xs font-bold text-slate-400 uppercase tracking-wider text-right">Score</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-white/[0.04]">
-              {participants.map((p: any, idx: number) => {
-                const u = userMap.get(p.userId);
+              {serializedParticipants.map((p, idx) => {
+                const u = serializedUserMap[p.userId];
                 
                 let rankVisual = <span className="font-bold text-slate-400">{idx + 1}</span>;
                 if (idx === 0) rankVisual = <Medal className="w-6 h-6 text-yellow-400 mx-auto" />;
@@ -59,7 +78,7 @@ export default async function TournamentLeaderboardPage(props: { params: Promise
                 else if (idx === 2) rankVisual = <Medal className="w-6 h-6 text-amber-600 mx-auto" />;
 
                 return (
-                  <tr key={p._id.toString()} className="hover:bg-white/[0.02] transition-colors">
+                  <tr key={p.id} className="hover:bg-white/[0.02] transition-colors">
                     <td className="px-6 py-4 text-center">
                       {rankVisual}
                     </td>
@@ -75,15 +94,18 @@ export default async function TournamentLeaderboardPage(props: { params: Promise
                         <span className="font-bold text-white text-lg">{u?.username || "Unknown Player"}</span>
                       </div>
                     </td>
+                    <td className="px-6 py-4 text-center">
+                      <span className="text-sm text-slate-500">{p.totalPenalty}</span>
+                    </td>
                     <td className="px-6 py-4 text-right">
                       <span className="font-black text-brand-cyan text-xl">{p.totalScore}</span>
                     </td>
                   </tr>
                 );
               })}
-              {participants.length === 0 && (
+              {serializedParticipants.length === 0 && (
                 <tr>
-                  <td colSpan={3} className="px-6 py-12 text-center text-slate-500">
+                  <td colSpan={4} className="px-6 py-12 text-center text-slate-500">
                     No one has joined this tournament yet.
                   </td>
                 </tr>
