@@ -21,7 +21,7 @@ import { DifficultyBadge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { cn, formatTime, getRankFromRating } from "@/lib/utils";
 import { useBattleSocket, type BattleEvent } from "@/lib/hooks/useBattleSocket";
-import { LANGUAGES, STARTER_CODE } from "@/lib/mock-data";
+import { LANGUAGES, STARTER_CODE } from "@/lib/constants";
 
 const MonacoEditor = dynamic(() => import("@monaco-editor/react"), {
   ssr: false,

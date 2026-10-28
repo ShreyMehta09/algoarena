@@ -16,7 +16,7 @@ import {
   BarChart2,
   AlertCircle
 } from "lucide-react";
-import { LANGUAGES, STARTER_CODE } from "@/lib/mock-data";
+import { LANGUAGES, STARTER_CODE } from "@/lib/constants";
 import { DifficultyBadge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
